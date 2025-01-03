@@ -91,7 +91,7 @@ unsigned char* crear_trama(int TYPE, char* data) {
     // Preparar la trama para enviar
     // [1B] TYPE, [2B] DATA_LENGTH, [247B] DATA, [2B] CHECKSUM, [4B] TIMESTAMP
     
-    unsigned char *trama = (char *)malloc(BUFFER_SIZE);
+    unsigned char *trama = (unsigned char *)malloc(BUFFER_SIZE);
     if (trama == NULL) {
         printF("Error en malloc para trama\n");
         return NULL;
@@ -101,7 +101,8 @@ unsigned char* crear_trama(int TYPE, char* data) {
     trama[0] = TYPE; // TYPE
     trama[1] = (strlen(data) >> 8) & 0xFF; // DATA_LENGTH (parte alta) (moviendo 8 bits a la derecha)
     trama[2] = strlen(data) & 0xFF;        // DATA_LENGTH (parte baja) (obteniendo solo los 8 primeros bits 0xFF)
-    strncpy(&trama[3], data, strlen(data)); // DATA
+    strncpy((char*)&trama[3], data, strlen(data)); // DATA
+    trama[3 + strlen(data)] = '\0';
 
 
     // Cálculo del checksum (suma de los bytes de trama[0] hasta trama[249])
@@ -109,6 +110,7 @@ unsigned char* crear_trama(int TYPE, char* data) {
     for (int i = 0; i < 250; i++) {
         checksum += trama[i]; // Sumamos cada byte (convertido a unsigned char)
     }
+    checksum %= 65536;  //Por si el resultado supera 16 bytes
     trama[250] = (checksum >> 8) & 0xFF; // Parte alta del checksum
     trama[251] = (checksum & 0xFF);        // Parte baja del checksum
 
@@ -215,7 +217,7 @@ void free_tramaResult(TramaResult *result) {
 
 void enviar_heartbeat_constantemente(int socket_fd) {
     
-    char buffer[BUFFER_SIZE];
+    unsigned char buffer[BUFFER_SIZE];
     unsigned char* tramaEnviar;
 
     while (1) {
@@ -264,20 +266,12 @@ void enviar_heartbeat_constantemente(int socket_fd) {
 
 void* responder_heartbeat_constantemente(void *arg) {
     int socket_fd = *(int *)arg;  // Obtener el socket_fd desde el argumento
-    char buffer[BUFFER_SIZE];
+    unsigned char buffer[BUFFER_SIZE];
     unsigned char* tramaEnviar;
 
     while (1) {
         // Leer el mensaje del servidor
         int bytes_read = recv(socket_fd, buffer, BUFFER_SIZE, 0);
-
-        // Comprobar mensaje leido sin errores
-        if (buffer == NULL)
-        {
-            printF("Error leyendo trama.\n");
-            pthread_exit(NULL);  // Terminar el hilo si ocurre un error
-        }
-        buffer[bytes_read] = '\0'; // Asegurar que está null-terminado
 
         if (bytes_read <= 0) {
             if (bytes_read == 0) {

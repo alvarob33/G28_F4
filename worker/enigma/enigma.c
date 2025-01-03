@@ -8,7 +8,7 @@ int gotham_sock_fd = -1;
 Server* server_flecks = NULL;
 
 // Funcion administra cierre de proceso correctamente
-void handle_sigint(int sig) {
+void handle_sigint(/*int sig*/) {
 
     printF("\nCerrando programa de manera segura...\n");
 
@@ -24,7 +24,7 @@ void handle_sigint(int sig) {
 
 
     // Cerrar servidor
-    if (server_flecks >= 0)
+    if (server_flecks != NULL)
     {
         close_server(server_flecks);
     }

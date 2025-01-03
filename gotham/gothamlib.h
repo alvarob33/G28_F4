@@ -29,6 +29,29 @@ typedef struct {
     int socket_fd;
 } Worker;
 
+typedef struct {
+    GothamConfig* config;           // Global para poder liberarse con SIGINT
+    Server* server_fleck;
+    Server* server_worker;
+
+    Worker* workers = NULL;           // Array donde almacenaremos los Workers conectados a Gotham
+    int num_workers;
+    int enigma_pworker_index;    //Indice del worker(Enigma) principal dentro del array de 'workers' (-1 si no hay)
+    int harley_pworker_index;    //Indice del worker(Harley) principal dentro del array de 'workers' (-1 si no hay)
+    // Mutex para cuando se modifiquen o lean las variables globales relacionadas con workers
+    pthread_mutex_t worker_mutex;
+
+    //Lista de sockets de flecks
+    int* fleck_sockets;
+    int num_flecks;
+
+    
+} GlobalInfoGotham;
+
+typedef struct {
+    int socket_connection;
+    GlobalInfoGotham* global_info;
+} ThreadArgsGotham;
 
 
 GothamConfig* GOTHAM_read_config(const char *config_file);

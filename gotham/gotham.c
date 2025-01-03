@@ -11,28 +11,18 @@
 
 
 /* Variables globales */ 
-GothamConfig* config;           // Global para poder liberarse con SIGINT
-Server* server_fleck;
-Server* server_worker;
-
-//// Tendran que ser memoria compartida!!!!!!!!!!!!!!!
-Worker* workers = NULL;           // Array donde almacenaremos los Workers conectados a Gotham
-int num_workers = 0;
-int enigma_pworker_index = -1;    //Indice del worker(Enigma) principal dentro del array de 'workers' (-1 si no hay)
-int harley_pworker_index = -1;    //Indice del worker(Harley) principal dentro del array de 'workers' (-1 si no hay)
-
-// Mutex para cuando se modifiquen o lean las variables globales relacionadas con workers
-pthread_mutex_t worker_mutex = PTHREAD_MUTEX_INITIALIZER; 
+GlobalInfoGotham* globalInfo = NULL;
+ 
 
 // Funcion administra cierre de proceso padre
-void handle_sigint(int sig) {
+void handle_sigint(/*int sig*/) {
 
     printF("\nCerrando programa de manera segura...\n");
 
     // Liberar la memoria dinámica asignada
-    free(config->ip_fleck);
-    free(config->ip_workers);
-    free(config);
+    free(globalInfo->config->ip_fleck);
+    free(globalInfo->config->ip_workers);
+    free(globalInfo->config);
 
 
     /* FLECK*/
@@ -40,7 +30,7 @@ void handle_sigint(int sig) {
     // Enviar mensajes de desconexion a Flecks
     //
     
-    close_server(server_fleck);
+    close_server(globalInfo->server_fleck);
 
 
     /* WORKER */
@@ -48,48 +38,54 @@ void handle_sigint(int sig) {
     // Enviar mensajes de desconexion a Workers
     //
 
-    close_server(server_worker);
+    close_server(globalInfo->server_worker);
 
-    // Bloquear el mutex antes de acceder a la lista de workers
-    pthread_mutex_lock(&worker_mutex);
+
+    pthread_mutex_lock(&globalInfo->worker_mutex);
 
     printF("Liberando memoria workers...\n");
     // Liberar memoria de los workers
-    liberar_memoria_workers();
+    liberar_memoria_workers(globalInfo);
 
-    // Desbloquear el mutex después de limpiar
-    pthread_mutex_unlock(&worker_mutex);
+    pthread_mutex_unlock(&globalInfo->worker_mutex);
 
     // Destruir el mutex
-    pthread_mutex_destroy(&worker_mutex);
+    pthread_mutex_destroy(&globalInfo->worker_mutex);
+
+    free(globalInfo);
     
+
     printF("Recursos liberados correctamente. Saliendo...\n\n");
 
     // Salir del programa
-    exit(0);
+    return 0;
 }
 
 
 // Funcion para crear Servidor de Flecks y administrar las conexiones entrantes
-void* fleck_server(void* arg) {
+void* fleck_server(/*void* arg*/) {
 
     // Configurar servidor
-    int socket_connection;
-
-    server_fleck = create_server(config->ip_fleck, config->port_fleck, 10);
-    start_server(server_fleck);
+    globalInfo->server_fleck = create_server(config->ip_fleck, config->port_fleck, 10);
+    start_server(globalInfo->server_fleck);
 
 
     printf("Esperando conexiones de Flecks...\n");
     //Bucle para leer cada petición que nos llegue de un fleck
     while (1)
     {
-        // Aceptar una nueva conexión
-        socket_connection = accept_connection(server_fleck);
+        // Creamos struct con argumentos para pasarle al thread
+        ThreadArgsGotham* args = malloc(sizeof(ThreadArgsGotham));
+        if (args == NULL) {
+            perror("Error al asignar memoria para ThreadArgsGotham");
+            continue;
+        }
+        args->socket_connection = accept_connection(globalInfo->server_fleck);
+        args->globalInfo = globalInfo;
 
         // Crear un hilo para manejar la conexión con el cliente
         pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, handle_fleck_connection, (void*)&socket_connection) != 0) {
+        if (pthread_create(&thread_id, NULL, handle_fleck_connection, (void*)args) != 0) {
             perror("Error al crear el hilo");
         }
 
@@ -97,18 +93,18 @@ void* fleck_server(void* arg) {
         pthread_detach(thread_id);
 
     }
-    close_server(server_fleck);
+    close_server(globalInfo->server_fleck);
 
     return NULL;
 }
 
 // Funcion para crear Servidor de Workers y administrar las conexiones entrantes
-void* workers_server(void* arg) {
+void* workers_server(/*void* arg*/) {
 
     int socket_connection;
 
     // Crear y configurar servidor
-    server_worker = create_server(config->ip_workers, config->port_workers, 10);
+    globalInfo->server_worker = create_server(config->ip_workers, config->port_workers, 10);
     start_server(server_worker);
 
 
@@ -116,12 +112,18 @@ void* workers_server(void* arg) {
     printF("Esperando conexiones de Workers...\n");
     while (1)
     {
-        // Aceptar una nueva conexión
-        socket_connection = accept_connection(server_worker);
+        // Creamos struct con argumentos para pasarle al thread
+        ThreadArgsGotham* args = malloc(sizeof(ThreadArgsGotham));
+        if (args == NULL) {
+            perror("Error al asignar memoria para ThreadArgsGotham");
+            continue;
+        }
+        args->socket_connection = accept_connection(globalInfo->server_fleck);  // Aceptamos conexion
+        args->globalInfo = globalInfo;
 
         // Crear un hilo para manejar la conexión con el cliente(Worker)
         pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, handle_worker_connection, (void*)&socket_connection) != 0) {
+        if (pthread_create(&thread_id, NULL, handle_worker_connection, (void*)args) != 0) {
             perror("Error al crear el hilo");
         }
 
@@ -129,14 +131,13 @@ void* workers_server(void* arg) {
         pthread_detach(thread_id);
 
     }
-    close_server(server_worker);
+    close_server(globalInfo->server_worker);
 
     return NULL;
 }
 
 int main(int argc, char *argv[]) {
     
-    // setup_shared_memory();          // Inicializamos variables de memoria compartida
     signal(SIGINT, handle_sigint); // Administrar cierre de recursos
 
     if (argc != 2) {
@@ -144,18 +145,41 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    // Creamos struct GlobalInfoGotham para info general de gotham
+    globalInfo = malloc(sizeof(GlobalInfoGotham));
+    if (globalInfo == NULL) {
+        perror("Error al asignar memoria para GlobalInfoGotham");
+        return -1;
+    }
+
     // Leer el archivo de configuración
-    config = GOTHAM_read_config(argv[1]);
-    if (config == NULL) {
-        printF("Error al leer la configuración.\n");
+    globalInfo->config = GOTHAM_read_config(argv[1]);
+    if (globalInfo->config == NULL) {
+        perror("Error al leer la configuración.\n");
         return -1;
     }
 
     // Mostrar configuración
-    GOTHAM_show_config(config);
+    GOTHAM_show_config(globalInfo->config);
+
+
+    /// Inicializamos toda la información general en GlobalInfo
+    globalInfo->num_workers = 0;
+    globalInfo->enigma_pworker_index = -1;    //Inicializamos en -1 indicando que no hay
+    globalInfo->harley_pworker_index = -1;    //Inicializamos en -1 indicando que no hay 
+
+    globalInfo->fleck_sockets = (int*)malloc(1 * sizeof(int));  //Inicializamos mem dinámica (para después poder hacer simplemente ralloc)
+    globalInfo->num_flecks = 0;
 
 
     //Creamos thread para servidores Fleck y Worker
+
+    /* SERVIDOR WORKER */
+    pthread_t workers_server_thread;
+    if (pthread_create(&workers_server_thread, NULL, workers_server, NULL) != 0) {
+        perror("Error al crear el hilo del servidor Workers");
+        exit(EXIT_FAILURE);
+    }
 
     /* SERVIDOR FLECK */
     pthread_t fleck_server_thread;
@@ -164,12 +188,6 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    /* SERVIDOR WORKER */
-    pthread_t workers_server_thread;
-    if (pthread_create(&workers_server_thread, NULL, workers_server, NULL) != 0) {
-        perror("Error al crear el hilo del servidor Workers");
-        exit(EXIT_FAILURE);
-    }
 
 
     ///SELECT (IGNORAR ESTA PARTE!!!) Posible mejora a futuro:
@@ -266,9 +284,9 @@ int main(int argc, char *argv[]) {
     pthread_join(workers_server_thread, NULL);
     
     // Liberar la memoria dinámica asignada
-    free(config->ip_fleck);
-    free(config->ip_workers);
-    free(config);
+    free(globalInfo->config->ip_fleck);
+    free(globalInfo->config->ip_workers);
+    free(globalInfo->config);
 
     return 0;
 }

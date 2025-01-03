@@ -262,16 +262,12 @@ int WORKER_connect_to_gotham(Enigma_HarleyConfig *config, int* isPrincipalWorker
 */
 void* responder_gotham(void *arg) {
     int socket_fd = *(int *)arg;  // Obtener el socket_fd desde el argumento
-    char buffer[BUFFER_SIZE];
-    char* tramaEnviar;
+    unsigned char buffer[BUFFER_SIZE];
+    unsigned char* tramaEnviar;
 
     while (1) {
         // Recibir mensaje del cliente
         int bytes_read = recv(socket_fd, buffer, BUFFER_SIZE, 0);
-        if (buffer == NULL)
-        {
-            printF("Error trama nula recibida.\n");
-        }
         
         if (bytes_read <= 0) {
             if (bytes_read == 0) {

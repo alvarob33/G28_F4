@@ -6,11 +6,11 @@
 #include "../worker/worker.h"
 #include "gothamlib.h"
 
-extern Worker* workers;
-extern int num_workers;
-extern int enigma_pworker_index;
-extern int harley_pworker_index;
-extern pthread_mutex_t worker_mutex;
+// extern Worker* workers;
+// extern int num_workers;
+// extern int enigma_pworker_index;
+// extern int harley_pworker_index;
+// extern pthread_mutex_t worker_mutex;
 
 
 // Función para leer el archivo de configuración
@@ -110,17 +110,17 @@ void liberar_memoria_worker(Worker worker) {
 }
 
 // Se libera la memoria de los structs
-void liberar_memoria_workers() {
-    if (workers == NULL) {
+void liberar_memoria_workers(GlobalInfo globalInfo) {
+    if (globalInfo->workers == NULL) {
         printF("Workers es null\n");
         return;
     }
 
-    for (int i = 0; i < num_workers; i++) {
-        liberar_memoria_worker(workers[i]);
+    for (int i = 0; i < globalInfo->num_workers; i++) {
+        liberar_memoria_worker(globalInfo->workers[i]);
     }
 
-    free(workers);  // Liberar el array dinámico de workers
+    free(globalInfo->workers);  // Liberar el array dinámico de workers
     printF("Memoria de los workers liberada correctamente.\n");
 }
 
@@ -188,7 +188,7 @@ void* handle_fleck_connection(void* fleck_socket) {
             free_tramaResult(result); // Liberar la trama procesada
 
             // Comprobar si hay Workers para el archivo solicitado
-            if (strcmp(mediaType, MEDIA) == 0 && harley_pworker_index < 0 || strcmp(mediaType, TEXT) == 0 && enigma_pworker_index < 0)
+            if ((strcmp(mediaType, MEDIA) == 0 && harley_pworker_index < 0) || (strcmp(mediaType, TEXT) == 0 && enigma_pworker_index < 0))
             {
                 // Responder con DISTORT_KO
                 unsigned char *response = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, "DISTORT_KO"); 
@@ -246,6 +246,8 @@ void* handle_fleck_connection(void* fleck_socket) {
                 printF(buffer);
                 free(buffer);
             }
+            free(mediaType);
+            free(fileName);
             
         }
         
@@ -537,7 +539,6 @@ void *handle_worker_connection(void *arg) {
     int socket_connection = *(int *)arg;
     unsigned char buffer[256]; // Buffer to receive data
     int bytes_read;
-    char* aux;
 
     // Esperar mensaje de Worker
     bytes_read = read(socket_connection, buffer, BUFFER_SIZE);

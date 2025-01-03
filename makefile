@@ -22,7 +22,7 @@ all: $(EXECUTABLES)
 
 # Regla para compilar cada archivo objeto
 %.o: %.c
-	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@
+	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@ $(LDFLAGS)
 
 gotham.exe: config/config.o config/connections.o gotham/gothamlib.o gotham/gotham.o
 	$(CC) $^ -o $@ $(LDFLAGS)
