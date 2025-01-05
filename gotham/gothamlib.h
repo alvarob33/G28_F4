@@ -34,16 +34,20 @@ typedef struct {
     Server* server_fleck;
     Server* server_worker;
 
-    Worker* workers = NULL;           // Array donde almacenaremos los Workers conectados a Gotham
+    Worker* workers;           // Array donde almacenaremos los Workers conectados a Gotham
     int num_workers;
-    int enigma_pworker_index;    //Indice del worker(Enigma) principal dentro del array de 'workers' (-1 si no hay)
-    int harley_pworker_index;    //Indice del worker(Harley) principal dentro del array de 'workers' (-1 si no hay)
+    int enigma_pworker_index;    // Indice del worker(Enigma) principal dentro del array de 'workers' (-1 si no hay)
+    int harley_pworker_index;    // Indice del worker(Harley) principal dentro del array de 'workers' (-1 si no hay)
     // Mutex para cuando se modifiquen o lean las variables globales relacionadas con workers
     pthread_mutex_t worker_mutex;
 
     //Lista de sockets de flecks
     int* fleck_sockets;
     int num_flecks;
+
+    // Threads de Workers y Fleck
+    pthread_t workers_server_thread;
+    pthread_t fleck_server_thread;
 
     
 } GlobalInfoGotham;

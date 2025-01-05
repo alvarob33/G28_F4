@@ -23,19 +23,10 @@ Server* create_server(char* ip_addr, int port, int max_connections) {
         exit(EXIT_FAILURE);
     }
 
-    // Habilitar la opción SO_REUSEADDR para reutilizar el puerto inmediatamente
-    // ESTO SIRVE PARA QUE EL PUERTO NO QUEDE INHABILITADO DURANTE X TIEMPO DESPUES DE CADA EJECUCIÓN 
-    int opt = 1;
-    if (setsockopt(server->server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        perror("Error al configurar SO_REUSEADDR");
-        close(server->server_fd);
-        exit(EXIT_FAILURE);
-    }
-
     // Configurar la dirección del servidor
     server->address.sin_family = AF_INET;        // IPv4
     server->address.sin_addr.s_addr = inet_addr(ip_addr); // Aceptar conexiones en cualquier interfaz
-    server->address.sin_port = htons(port);     // Puerto en formato de red
+    server->address.sin_port = port;     // Puerto en formato de red
     server->port = port;
     server->max_connections = max_connections;
 
@@ -53,8 +44,14 @@ Server* create_server(char* ip_addr, int port, int max_connections) {
 void start_server(Server *server) {
     char* buffer;
 
+    if (server == NULL)
+    {
+        printF("Error: Estructura del servidor no creada.\n");
+        return;
+    }
+    
     if (listen(server->server_fd, server->max_connections) < 0) {
-        perror("Error al iniciar la escucha");
+        perror("Error al iniciar la escucha.\n");
         close(server->server_fd);
         exit(EXIT_FAILURE);
     }
@@ -77,8 +74,12 @@ void close_server(Server *server) {
 // Función para establecer conexión con un cliente
 int accept_connection(Server *server) {
     socklen_t addrlen = sizeof(server->address);
+    if (server == NULL) {
+        perror( "Error: servidor no inicializado.\n");
+        return -1;
+    }
+
     int new_socket = accept(server->server_fd, (struct sockaddr *)&server->address, &addrlen);
-    
     if (new_socket < 0) {
         perror("Error al aceptar la conexión");
         return -1;
@@ -87,33 +88,28 @@ int accept_connection(Server *server) {
     return new_socket;
 }
 
-unsigned char* crear_trama(int TYPE, char* data) {
+unsigned char* crear_trama(int TYPE, unsigned char* data, size_t data_length) {
     // Preparar la trama para enviar
     // [1B] TYPE, [2B] DATA_LENGTH, [247B] DATA, [2B] CHECKSUM, [4B] TIMESTAMP
     
+    if (data_length > 247) {
+        printF("Error: los datos superan el tamaño permitido (247 bytes).\n");
+        return NULL;
+    }
+
     unsigned char *trama = (unsigned char *)malloc(BUFFER_SIZE);
     if (trama == NULL) {
         printF("Error en malloc para trama\n");
         return NULL;
     }
 
-    memset(trama, 0, BUFFER_SIZE);  // Se inicia la trama a ceros(0)
+    memset(trama, 0, BUFFER_SIZE);  // Inicializar la trama a ceros
     trama[0] = TYPE; // TYPE
-    trama[1] = (strlen(data) >> 8) & 0xFF; // DATA_LENGTH (parte alta) (moviendo 8 bits a la derecha)
-    trama[2] = strlen(data) & 0xFF;        // DATA_LENGTH (parte baja) (obteniendo solo los 8 primeros bits 0xFF)
-    strncpy((char*)&trama[3], data, strlen(data)); // DATA
-    trama[3 + strlen(data)] = '\0';
-
-
-    // Cálculo del checksum (suma de los bytes de trama[0] hasta trama[249])
-    unsigned short checksum = 0; // Usamos 2 bytes (16 bits) para el checksum
-    for (int i = 0; i < 250; i++) {
-        checksum += trama[i]; // Sumamos cada byte (convertido a unsigned char)
-    }
-    checksum %= 65536;  //Por si el resultado supera 16 bytes
-    trama[250] = (checksum >> 8) & 0xFF; // Parte alta del checksum
-    trama[251] = (checksum & 0xFF);        // Parte baja del checksum
-
+    trama[1] = (data_length >> 8) & 0xFF; // DATA_LENGTH (parte alta)
+    trama[2] = data_length & 0xFF;        // DATA_LENGTH (parte baja)
+    
+    // Copiar los datos binarios en la sección de DATA
+    memcpy(&trama[3], data, data_length);
 
     // Obtención del timestamp (4 bytes a partir de trama[252])
     time_t timestamp = time(NULL);
@@ -121,13 +117,43 @@ unsigned char* crear_trama(int TYPE, char* data) {
     trama[253] = (timestamp >> 16) & 0xFF;
     trama[254] = (timestamp >> 8) & 0xFF;
     trama[255] = timestamp & 0xFF;         // Byte menos significativo
-
+    
+    // Cálculo del checksum (suma de los bytes de trama[0] hasta trama[249])
+    unsigned short checksum = 0; // Usamos 2 bytes (16 bits) para el checksum
+    for (int i = 0; i < 250; i++) {
+        checksum += trama[i]; // Sumamos cada byte
+    }
+    for (int i = 252; i < 256; i++) {
+        checksum += trama[i]; // Sumamos cada byte
+    }
+    checksum %= 65536;  // Por si el resultado supera 16 bits
+    trama[250] = (checksum >> 8) & 0xFF; // Parte alta del checksum
+    trama[251] = checksum & 0xFF;        // Parte baja del checksum
 
     return trama;
 }
 
 TramaResult* leer_trama(unsigned char *trama) {
     if (trama == NULL) return NULL;
+    
+    // Comprobar CHECKSUM
+    unsigned short checksum_calculado = 0;
+    for (int i = 0; i < 250; i++) {
+        checksum_calculado += trama[i]; // Sumar cada byte
+    }
+    for (int i = 252; i < 256; i++) {
+        checksum_calculado += trama[i]; // Sumar cada byte
+    }
+    unsigned short checksum_enviado = (trama[250] << 8) | trama[251]; // Reconstruir el checksum 
+
+    /* Para DEBUGGING: Comparar checksums */
+    // printf("Type: 0x%04x\n", trama[0]);
+    // printf("Checksum calculado: 0x%04x, Checksum recibido: 0x%04x\n", checksum_calculado, checksum_enviado);
+
+    if (checksum_calculado != checksum_enviado) {
+        printF("Error: Checksum inválido.\n");
+        return NULL;
+    }
 
     // Crear el struct de resultado
     TramaResult *result = (TramaResult *)malloc(sizeof(TramaResult));
@@ -140,21 +166,6 @@ TramaResult* leer_trama(unsigned char *trama) {
     result->timestamp = NULL;
     result->data = NULL;
 
-    unsigned short checksum_calculado = 0;
-    for (int i = 0; i < 250; i++) {
-        checksum_calculado += trama[i]; // Sumar cada byte
-    }
-    unsigned short checksum_enviado = (trama[250] << 8) | trama[251]; // Reconstruir el checksum 
-
-    /* Comparar checksums (Para DEBUGGING) */
-    // printf("Type: 0x%04x\n", trama[0]);
-    // printf("Checksum calculado: 0x%04x, Checksum recibido: 0x%04x\n", checksum_calculado, checksum_enviado);
-
-    if (checksum_calculado != checksum_enviado) {
-        printF("Error: Checksum inválido.\n");
-        free(result);
-        return NULL;
-    }
 
     // Leer el campo data_length 
     int data_length = (trama[1] << 8) | trama[2]; // Reconstruir la longitud de los datos
@@ -222,7 +233,7 @@ void enviar_heartbeat_constantemente(int socket_fd) {
 
     while (1) {
         // Enviar el mensaje de heartbeat
-        tramaEnviar = crear_trama(TYPE_HEARTBEAT, "");
+        tramaEnviar = crear_trama(TYPE_HEARTBEAT, (unsigned char*)"", strlen(""));
         if (write(socket_fd, tramaEnviar, BUFFER_SIZE) < 0) {
             perror("Error enviando heartbeat");
             close(socket_fd);
@@ -291,7 +302,7 @@ void* responder_heartbeat_constantemente(void *arg) {
         {
             //Si la trama es un mensaje HEARTBEAT responder con OK
             // Responder al servidor
-            tramaEnviar = crear_trama(TYPE_HEARTBEAT, "");
+            tramaEnviar = crear_trama(TYPE_HEARTBEAT, (unsigned char*)"", strlen(""));
             if (write(socket_fd, tramaEnviar, BUFFER_SIZE) < 0) {
                 perror("Error enviando respuesta al servidor");
                 close(socket_fd);

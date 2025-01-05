@@ -55,7 +55,7 @@ void close_server(Server *server);
 int accept_connection(Server *server);
 
 // Funciones para trabajar con tramas
-unsigned char* crear_trama(int TYPE, char* data);
+unsigned char* crear_trama(int TYPE, unsigned char* data, size_t data_length);
 TramaResult* leer_trama(unsigned char *trama);  // Comprueba que el checksum sea correcto y devuelve la data del mensaje
 // Libera la memoria de TramaResult
 void free_tramaResult(TramaResult *result);

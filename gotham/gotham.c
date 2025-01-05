@@ -12,7 +12,7 @@
 
 /* Variables globales */ 
 GlobalInfoGotham* globalInfo = NULL;
- 
+int program_running = 1;
 
 // Funcion administra cierre de proceso padre
 void handle_sigint(/*int sig*/) {
@@ -58,59 +58,24 @@ void handle_sigint(/*int sig*/) {
     printF("Recursos liberados correctamente. Saliendo...\n\n");
 
     // Salir del programa
-    return 0;
-}
+    program_running = 0;
+    pthread_cancel(globalInfo->workers_server_thread);
+    pthread_cancel(globalInfo->fleck_server_thread);
 
-
-// Funcion para crear Servidor de Flecks y administrar las conexiones entrantes
-void* fleck_server(/*void* arg*/) {
-
-    // Configurar servidor
-    globalInfo->server_fleck = create_server(config->ip_fleck, config->port_fleck, 10);
-    start_server(globalInfo->server_fleck);
-
-
-    printf("Esperando conexiones de Flecks...\n");
-    //Bucle para leer cada petición que nos llegue de un fleck
-    while (1)
-    {
-        // Creamos struct con argumentos para pasarle al thread
-        ThreadArgsGotham* args = malloc(sizeof(ThreadArgsGotham));
-        if (args == NULL) {
-            perror("Error al asignar memoria para ThreadArgsGotham");
-            continue;
-        }
-        args->socket_connection = accept_connection(globalInfo->server_fleck);
-        args->globalInfo = globalInfo;
-
-        // Crear un hilo para manejar la conexión con el cliente
-        pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, handle_fleck_connection, (void*)args) != 0) {
-            perror("Error al crear el hilo");
-        }
-
-        // No esperamos a que el hilo termine, porque queremos seguir aceptando conexiones.
-        pthread_detach(thread_id);
-
-    }
-    close_server(globalInfo->server_fleck);
-
-    return NULL;
+    // exit(EXIT_SUCCESS);
 }
 
 // Funcion para crear Servidor de Workers y administrar las conexiones entrantes
 void* workers_server(/*void* arg*/) {
 
-    int socket_connection;
-
     // Crear y configurar servidor
-    globalInfo->server_worker = create_server(config->ip_workers, config->port_workers, 10);
-    start_server(server_worker);
+    globalInfo->server_worker = create_server(globalInfo->config->ip_workers, globalInfo->config->port_workers, 10);
+    start_server(globalInfo->server_worker);
 
 
-    //Bucle para leer cada conexion que nos llegue de un worker
     printF("Esperando conexiones de Workers...\n");
-    while (1)
+    //Bucle para leer cada conexion que nos llegue de un worker
+    while (program_running)
     {
         // Creamos struct con argumentos para pasarle al thread
         ThreadArgsGotham* args = malloc(sizeof(ThreadArgsGotham));
@@ -118,23 +83,69 @@ void* workers_server(/*void* arg*/) {
             perror("Error al asignar memoria para ThreadArgsGotham");
             continue;
         }
-        args->socket_connection = accept_connection(globalInfo->server_fleck);  // Aceptamos conexion
-        args->globalInfo = globalInfo;
 
-        // Crear un hilo para manejar la conexión con el cliente(Worker)
-        pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, handle_worker_connection, (void*)args) != 0) {
-            perror("Error al crear el hilo");
+        args->socket_connection = accept_connection(globalInfo->server_worker);  // Aceptamos conexion
+        if (args->socket_connection >= 0)
+        {
+            args->global_info = globalInfo;
+
+            // Crear un hilo para manejar la conexión con el cliente(Worker)
+            pthread_t thread_id;
+            if (pthread_create(&thread_id, NULL, handle_worker_connection, (void*)args) != 0) {
+                perror("Error al crear el hilo");
+            }
+
+            // No esperamos a que el hilo termine, porque queremos seguir aceptando conexiones.
+            pthread_detach(thread_id);
         }
-
-        // No esperamos a que el hilo termine, porque queremos seguir aceptando conexiones.
-        pthread_detach(thread_id);
-
+        
     }
-    close_server(globalInfo->server_worker);
+    //close_server(globalInfo->server_worker);
 
     return NULL;
 }
+
+// Funcion para crear Servidor de Flecks y administrar las conexiones entrantes
+void* fleck_server(/*void* arg*/) {
+
+    // Crear y configurar servidor
+    globalInfo->server_fleck = create_server(globalInfo->config->ip_fleck, globalInfo->config->port_fleck, 10);
+    start_server(globalInfo->server_fleck);
+
+
+    printF("Esperando conexiones de Flecks...\n");
+    //Bucle para leer cada petición que nos llegue de un fleck
+    while (program_running)
+    {
+        // Creamos struct con argumentos para pasarle al thread
+        ThreadArgsGotham* args = malloc(sizeof(ThreadArgsGotham));
+        if (args == NULL) {
+            perror("Error al asignar memoria para ThreadArgsGotham");
+            continue;
+        }
+        
+        args->socket_connection = accept_connection(globalInfo->server_fleck);
+        if (args->socket_connection >= 0) 
+        {
+            args->global_info = globalInfo;
+
+            // Crear un hilo para manejar la conexión con el cliente
+            pthread_t thread_id;
+            if (pthread_create(&thread_id, NULL, handle_fleck_connection, (void*)args) != 0) {
+                perror("Error al crear el hilo");
+            }
+
+            // No esperamos a que el hilo termine, porque queremos seguir aceptando conexiones.
+            pthread_detach(thread_id);
+
+        }
+
+    }
+    //close_server(globalInfo->server_fleck);
+
+    return NULL;
+}
+
 
 int main(int argc, char *argv[]) {
     
@@ -164,9 +175,11 @@ int main(int argc, char *argv[]) {
 
 
     /// Inicializamos toda la información general en GlobalInfo
+    globalInfo->workers = 0;
     globalInfo->num_workers = 0;
     globalInfo->enigma_pworker_index = -1;    //Inicializamos en -1 indicando que no hay
     globalInfo->harley_pworker_index = -1;    //Inicializamos en -1 indicando que no hay 
+    pthread_mutex_init(&globalInfo->worker_mutex, NULL);
 
     globalInfo->fleck_sockets = (int*)malloc(1 * sizeof(int));  //Inicializamos mem dinámica (para después poder hacer simplemente ralloc)
     globalInfo->num_flecks = 0;
@@ -175,17 +188,15 @@ int main(int argc, char *argv[]) {
     //Creamos thread para servidores Fleck y Worker
 
     /* SERVIDOR WORKER */
-    pthread_t workers_server_thread;
-    if (pthread_create(&workers_server_thread, NULL, workers_server, NULL) != 0) {
+    if (pthread_create(&globalInfo->workers_server_thread, NULL, workers_server, NULL) != 0) {
         perror("Error al crear el hilo del servidor Workers");
-        exit(EXIT_FAILURE);
+        handle_sigint();
     }
 
     /* SERVIDOR FLECK */
-    pthread_t fleck_server_thread;
-    if (pthread_create(&fleck_server_thread, NULL, fleck_server, NULL) != 0) {
+    if (pthread_create(&globalInfo->fleck_server_thread, NULL, fleck_server, NULL) != 0) {
         perror("Error al crear el hilo del servidor Fleck");
-        exit(EXIT_FAILURE);
+        handle_sigint();
     }
 
 
@@ -280,13 +291,8 @@ int main(int argc, char *argv[]) {
     ///SELECT
 
  
-    pthread_join(fleck_server_thread, NULL);
-    pthread_join(workers_server_thread, NULL);
-    
-    // Liberar la memoria dinámica asignada
-    free(globalInfo->config->ip_fleck);
-    free(globalInfo->config->ip_workers);
-    free(globalInfo->config);
+    pthread_join(globalInfo->fleck_server_thread, NULL);
+    pthread_join(globalInfo->workers_server_thread, NULL);
 
     return 0;
 }

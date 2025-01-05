@@ -173,7 +173,7 @@ int WORKER_connect_to_gotham(Enigma_HarleyConfig *config, int* isPrincipalWorker
     // Configurar dirección de Gotham
     struct sockaddr_in gotham_address;
     gotham_address.sin_family = AF_INET;
-    gotham_address.sin_port = htons(config->port_gotham);
+    gotham_address.sin_port = config->port_gotham;
     if (inet_pton(AF_INET, config->ip_gotham, &gotham_address.sin_addr) <= 0) {
         printF("Dirección IP de Gotham no válida\n");
         close(sock_fd);
@@ -197,7 +197,7 @@ int WORKER_connect_to_gotham(Enigma_HarleyConfig *config, int* isPrincipalWorker
     asprintf(&data, "%s&%s&%d", config->worker_type, config->ip_gotham, config->port_gotham);
     
 
-    unsigned char *trama = crear_trama(TYPE_CONNECT_WORKER_GOTHAM, data);
+    unsigned char *trama = crear_trama(TYPE_CONNECT_WORKER_GOTHAM, (unsigned char*)data, strlen(data));
     if (trama == NULL) {
         printF("Error creando la trama\n");
         free(data);
@@ -295,7 +295,7 @@ void* responder_gotham(void *arg) {
             if (result->type == TYPE_HEARTBEAT)
             {
                 // Responder al cliente
-                tramaEnviar = crear_trama(TYPE_HEARTBEAT, "");
+                tramaEnviar = crear_trama(TYPE_HEARTBEAT, (unsigned char*)"", strlen(""));
                 if (write(socket_fd, tramaEnviar, BUFFER_SIZE) < 0) {
                     perror("Error enviando respuesta al cliente");
                     close(socket_fd);
@@ -321,7 +321,7 @@ void* responder_gotham(void *arg) {
 int WORKER_disconnect_from_gotham(int sock_fd, Enigma_HarleyConfig *config) {
 
     // Preparar la trama para enviar el mensaje de desconexión
-    unsigned char *trama = crear_trama(TYPE_DISCONNECTION, config->worker_type);
+    unsigned char *trama = crear_trama(TYPE_DISCONNECTION, (unsigned char*)config->worker_type, strlen(config->worker_type));
     if (trama == NULL) {
         printF("Error creando la trama de desconexión\n");
         return -1;

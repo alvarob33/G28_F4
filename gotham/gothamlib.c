@@ -110,7 +110,7 @@ void liberar_memoria_worker(Worker worker) {
 }
 
 // Se libera la memoria de los structs
-void liberar_memoria_workers(GlobalInfo globalInfo) {
+void liberar_memoria_workers(GlobalInfoGotham* globalInfo) {
     if (globalInfo->workers == NULL) {
         printF("Workers es null\n");
         return;
@@ -125,8 +125,13 @@ void liberar_memoria_workers(GlobalInfo globalInfo) {
 }
 
 
-void* handle_fleck_connection(void* fleck_socket) {
-    int socket_fd = *(int*)fleck_socket;
+void* handle_fleck_connection(void* void_args) {
+    ThreadArgsGotham* args = (ThreadArgsGotham *)void_args;
+    GlobalInfoGotham* globalInfo = args->global_info;
+    int socket_fd = args->socket_connection;
+    free(void_args);    // Liberamos porque solo lo utilizamos para pasar parámetros al thread
+
+
     unsigned char buffer[BUFFER_SIZE];
     int bytes_read;
 
@@ -159,7 +164,7 @@ void* handle_fleck_connection(void* fleck_socket) {
                 printf("Usuario conectado: %s, IP: %s, Puerto: %s\n", username, ip, port);
 
                 // Responder con OK
-                unsigned char *response = crear_trama(TYPE_CONNECT_FLECK_GOTHAM, "");  // DATA vacío
+                unsigned char *response = crear_trama(TYPE_CONNECT_FLECK_GOTHAM, (unsigned char*)"", strlen(""));  // DATA vacío
                 if (write(socket_fd, response, BUFFER_SIZE) < 0) {
                     perror("Error enviando respuesta OK a Fleck");
                 }
@@ -169,7 +174,7 @@ void* handle_fleck_connection(void* fleck_socket) {
 
             } else {
                 // Responder con CON_KO si el formato es incorrecto
-                unsigned char *response = crear_trama(TYPE_CONNECT_FLECK_GOTHAM, "CON_KO");
+                unsigned char *response = crear_trama(TYPE_CONNECT_FLECK_GOTHAM, (unsigned char*)"CON_KO", strlen("CON_KO"));
                 if (write(socket_fd, response, BUFFER_SIZE) < 0) {
                     perror("Error enviando respuesta CON_KO a Fleck");
                 }
@@ -188,10 +193,10 @@ void* handle_fleck_connection(void* fleck_socket) {
             free_tramaResult(result); // Liberar la trama procesada
 
             // Comprobar si hay Workers para el archivo solicitado
-            if ((strcmp(mediaType, MEDIA) == 0 && harley_pworker_index < 0) || (strcmp(mediaType, TEXT) == 0 && enigma_pworker_index < 0))
+            if ((strcmp(mediaType, MEDIA) == 0 && globalInfo->harley_pworker_index < 0) || (strcmp(mediaType, TEXT) == 0 && globalInfo->enigma_pworker_index < 0))
             {
                 // Responder con DISTORT_KO
-                unsigned char *response = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, "DISTORT_KO"); 
+                unsigned char *response = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, (unsigned char*)"DISTORT_KO", strlen("DISTORT_KO")); 
                 if (write(socket_fd, response, BUFFER_SIZE) < 0) {
                     perror("Error enviando respuesta DISTORT_KO a Fleck");
                 }
@@ -211,8 +216,8 @@ void* handle_fleck_connection(void* fleck_socket) {
             {
                 // Responder con datos Worker Harley principal
                 char* data;
-                asprintf(&data, "%s&%s", workers[harley_pworker_index].IP, workers[harley_pworker_index].Port);
-                unsigned char *response = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, data); 
+                asprintf(&data, "%s&%s", globalInfo->workers[globalInfo->harley_pworker_index].IP, globalInfo->workers[globalInfo->harley_pworker_index].Port);
+                unsigned char *response = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, (unsigned char*)data, strlen(data)); 
                 free(data);
 
                 if (write(socket_fd, response, BUFFER_SIZE) < 0) {
@@ -224,8 +229,8 @@ void* handle_fleck_connection(void* fleck_socket) {
             {
                 // Responder con datos Worker Enigma principal
                 char* data;
-                asprintf(&data, "%s&%s", workers[enigma_pworker_index].IP, workers[enigma_pworker_index].Port);
-                unsigned char *response = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, data); 
+                asprintf(&data, "%s&%s", globalInfo->workers[globalInfo->enigma_pworker_index].IP, globalInfo->workers[globalInfo->enigma_pworker_index].Port);
+                unsigned char *response = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, (unsigned char*)data, strlen(data)); 
                 free(data);
 
                 if (write(socket_fd, response, BUFFER_SIZE) < 0) {
@@ -235,7 +240,7 @@ void* handle_fleck_connection(void* fleck_socket) {
                 printF("Worker Enigma pricipal enviado a Fleck.\n");
             } else {
                 // Responder con MEDIA_KO
-                unsigned char *response = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, "MEDIA_KO"); 
+                unsigned char *response = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, (unsigned char*)"MEDIA_KO", strlen("MEDIA_KO")); 
                 if (write(socket_fd, response, BUFFER_SIZE) < 0) {
                     perror("Error enviando respuesta MEDIA_KO a Fleck");
                 }
@@ -365,183 +370,186 @@ void* handle_fleck_connection(void* client_socket) {
 }
 */
 
-int find_worker_bySocket(int socket_fd) {
-    for (int i = 0; i < num_workers; i++) {
-        if (workers[i].socket_fd == socket_fd) {
+int find_worker_bySocket(GlobalInfoGotham* globalInfo, int socket_fd) {
+    for (int i = 0; i < globalInfo->num_workers; i++) {
+        if (globalInfo->workers[i].socket_fd == socket_fd) {
             return i; // Índice encontrado
         }
     }
     return -1; // No se encontró el Worker
 }
 
-int store_new_worker(TramaResult* result) {
+int store_new_worker(GlobalInfoGotham* globalInfo, TramaResult* result) {
     
     // Comprobar que no se supere número máximo de Workers
-    if (num_workers >= MAX_WORKERS) {
-        pthread_mutex_unlock(&worker_mutex);
+    if (globalInfo->num_workers >= MAX_WORKERS) {
+        pthread_mutex_unlock(&globalInfo->worker_mutex);
         printF("Error: No se pudo agregar el worker. Límite de workers alcanzado.\n");
         return 0;
     }
     
     // Crear nuevo worker dinámico
-    if (workers == NULL)
+    if (globalInfo->workers == NULL)
     {
-        workers = (Worker *)malloc(sizeof(Worker));
-        if (workers == NULL) {
-            pthread_mutex_unlock(&worker_mutex);
+        globalInfo->workers = (Worker *)malloc(sizeof(Worker));
+        if (globalInfo->workers == NULL) {
+            pthread_mutex_unlock(&globalInfo->worker_mutex);
             perror("Failed to allocate memory for new worker");
             return 0;
         }
 
     } else {
-        workers = realloc(workers, (num_workers + 1) * sizeof(Worker));
-        if (workers == NULL) {
-            pthread_mutex_unlock(&worker_mutex);
+        globalInfo->workers = realloc(globalInfo->workers, (globalInfo->num_workers + 1) * sizeof(Worker));
+        if (globalInfo->workers == NULL) {
+            pthread_mutex_unlock(&globalInfo->worker_mutex);
             perror("Failed to reallocate memory for workers array");
             return 0;
         }
     }
 
     // Procesar data con el formato <workerType>&<IP>&<Port>
-    workers[num_workers].workerType = strdup(strtok(result->data, "&"));
-    workers[num_workers].IP = strdup(strtok(NULL, "&"));
-    workers[num_workers].Port = strdup(strtok(NULL, "&"));
+    globalInfo->workers[globalInfo->num_workers].workerType = strdup(strtok(result->data, "&"));
+    globalInfo->workers[globalInfo->num_workers].IP = strdup(strtok(NULL, "&"));
+    globalInfo->workers[globalInfo->num_workers].Port = strdup(strtok(NULL, "&"));
     free_tramaResult(result);
 
     // check and print worker info
-    if (workers[num_workers].workerType == NULL || workers[num_workers].IP == NULL || workers[num_workers].Port == NULL) {
+    if (globalInfo->workers[globalInfo->num_workers].workerType == NULL || globalInfo->workers[globalInfo->num_workers].IP == NULL || globalInfo->workers[globalInfo->num_workers].Port == NULL) {
         printF("Error: Formato de datos inválido.\n");
         return 0;
     }
 
     char* aux;
     asprintf(&aux, "New worker added: workerType=%s, IP=%s, Port=%s\n",
-           workers[num_workers].workerType, workers[num_workers].IP, workers[num_workers].Port);
+           globalInfo->workers[globalInfo->num_workers].workerType, globalInfo->workers[globalInfo->num_workers].IP, globalInfo->workers[globalInfo->num_workers].Port);
     printF(aux);
 
-    num_workers++;
+    globalInfo->num_workers++;
     
     return 1;
 }
 
-void remove_worker(int socket_fd) {
-    pthread_mutex_lock(&worker_mutex);
+void remove_worker(GlobalInfoGotham* globalInfo, int socket_fd) {
+    pthread_mutex_lock(&globalInfo->worker_mutex);
 
-    int index = find_worker_bySocket(socket_fd);
+    int index = find_worker_bySocket(globalInfo, socket_fd);
     if (index < 0) {
         perror("Error al buscar Worker mediante su socket.");
-        pthread_mutex_unlock(&worker_mutex);
+        pthread_mutex_unlock(&globalInfo->worker_mutex);
         return;
     }
 
-    liberar_memoria_worker(workers[index]);
+    liberar_memoria_worker(globalInfo->workers[index]);
     // Mover los elementos restantes hacia adelante para rellenar hueco
-    for (int i = index; i < num_workers - 1; i++) {
-        workers[i] = workers[i + 1];
+    for (int i = index; i < globalInfo->num_workers - 1; i++) {
+        globalInfo->workers[i] = globalInfo->workers[i + 1];
     }
 
-    num_workers--;
-    workers = realloc(workers, num_workers * sizeof(Worker));
-    if (workers == NULL && num_workers > 0) {
+    globalInfo->num_workers--;
+    globalInfo->workers = realloc(globalInfo->workers, globalInfo->num_workers * sizeof(Worker));
+    if (globalInfo->workers == NULL && globalInfo->num_workers > 0) {
         perror("Error al realocar memoria para workers.");
-        pthread_mutex_unlock(&worker_mutex);
+        pthread_mutex_unlock(&globalInfo->worker_mutex);
         return;
     }
 
     // Comprobar si era un Worker principal, y en dicho caso asignar a uno nuevo
-    if (index == enigma_pworker_index) {
-        enigma_pworker_index = -1;  // Borrar el índice de Enigma Principal Worker
+    if (index == globalInfo->enigma_pworker_index) {
+        globalInfo->enigma_pworker_index = -1;  // Borrar el índice de Enigma Principal Worker
 
         // Buscar un nuevo worker de tipo "Text"
-        for (int i = 0; i < num_workers; i++) {
-            if (strcmp(workers[i].workerType, "Text") == 0) {
+        for (int i = 0; i < globalInfo->num_workers; i++) {
+            if (strcmp(globalInfo->workers[i].workerType, "Text") == 0) {
 
                 // WORKER ENCONTRADO
-                enigma_pworker_index = i;
+                globalInfo->enigma_pworker_index = i;
 
                 // Crear trama informando que es el nuevo Principal Worker
                 unsigned char* trama;
-                trama = crear_trama(TYPE_PRINCIPAL_WORKER, "");
+                trama = crear_trama(TYPE_PRINCIPAL_WORKER, (unsigned char*)"", strlen(""));
                 if (trama == NULL) {
                     printF("Error en malloc para trama\n");
-                    pthread_mutex_unlock(&worker_mutex);
+                    pthread_mutex_unlock(&globalInfo->worker_mutex);
                     return;
                 }
 
                 // Enviar la trama a Worker
-                if (write(workers[i].socket_fd, trama, BUFFER_SIZE) < 0) {
+                if (write(globalInfo->workers[i].socket_fd, trama, BUFFER_SIZE) < 0) {
                     printF("Error enviando la trama de conexión a Gotham\n");
                     free(trama);
-                    pthread_mutex_unlock(&worker_mutex);
+                    pthread_mutex_unlock(&globalInfo->worker_mutex);
                     return;
                 }
                 free(trama);
 
                 // Mostrar mensaje indicando que encontramos un nuevo Principal Worker
                 char* buffer;
-                asprintf(&buffer, "Nuevo pworker de tipo 'Text' encontrado en el índice %d.\n", enigma_pworker_index);
+                asprintf(&buffer, "Nuevo pworker de tipo 'Text' encontrado en el índice %d.\n", globalInfo->enigma_pworker_index);
                 printF(buffer);
                 free(buffer);
                 break;
             }
         }
 
-        if (enigma_pworker_index == -1) {
+        if (globalInfo->enigma_pworker_index == -1) {
             printF("No hay Workers de tipo 'Text' para asignar como Principal Worker.\n");
         }
-    } else if (index == harley_pworker_index) {
-        harley_pworker_index = -1;  // Borrar el índice de Harley Principal Worker
+    } else if (index == globalInfo->harley_pworker_index) {
+        globalInfo->harley_pworker_index = -1;  // Borrar el índice de Harley Principal Worker
 
         // Buscar un nuevo worker de tipo "Media"
-        for (int i = 0; i < num_workers; i++) {
-            if (strcmp(workers[i].workerType, "Media") == 0) {
+        for (int i = 0; i < globalInfo->num_workers; i++) {
+            if (strcmp(globalInfo->workers[i].workerType, "Media") == 0) {
                 
                 // WORKER ENCONTRADO
-                harley_pworker_index = i;
+                globalInfo->harley_pworker_index = i;
 
                 // Crear trama informando que es el nuevo Principal Worker
                 unsigned char* trama;
-                trama = crear_trama(TYPE_PRINCIPAL_WORKER, "");
+                trama = crear_trama(TYPE_PRINCIPAL_WORKER, (unsigned char*)"", strlen(""));
                 if (trama == NULL) {
                     printF("Error en malloc para trama\n");
-                    pthread_mutex_unlock(&worker_mutex);
+                    pthread_mutex_unlock(&globalInfo->worker_mutex);
                     return;
                 }
 
                 // Enviar la trama a Worker
-                if (write(workers[i].socket_fd, trama, BUFFER_SIZE) < 0) {
+                if (write(globalInfo->workers[i].socket_fd, trama, BUFFER_SIZE) < 0) {
                     printF("Error enviando la trama de conexión a Gotham\n");
                     free(trama);
-                    pthread_mutex_unlock(&worker_mutex);
+                    pthread_mutex_unlock(&globalInfo->worker_mutex);
                     return;
                 }
                 free(trama);
 
                 // Mostrar mensaje indicando que encontramos un nuevo Principal Worker
                 char* buffer;
-                asprintf(&buffer, "Nuevo pworker de tipo 'Media' encontrado en el índice %d.\n", harley_pworker_index);
+                asprintf(&buffer, "Nuevo pworker de tipo 'Media' encontrado en el índice %d.\n", globalInfo->harley_pworker_index);
                 printF(buffer);
                 free(buffer);
                 break;
             }
         }
-        if (harley_pworker_index == -1) {
+        if (globalInfo->harley_pworker_index == -1) {
             printF("No hay Workers de tipo 'Media' para asignar como Principal Worker.\n");
         }
     }
 
     // printf("Worker en índice %d eliminado correctamente.\n", index);
-    pthread_mutex_unlock(&worker_mutex);
+    pthread_mutex_unlock(&globalInfo->worker_mutex);
 }
 
 
-void *handle_worker_connection(void *arg) {
-    int socket_connection = *(int *)arg;
-    unsigned char buffer[256]; // Buffer to receive data
-    int bytes_read;
+void *handle_worker_connection(void *void_args) {
+    ThreadArgsGotham* args = (ThreadArgsGotham *)void_args;
+    GlobalInfoGotham* globalInfo = args->global_info;
+    int socket_connection = args->socket_connection;
+    free(void_args);    // Liberamos porque solo lo utilizamos para pasar parámetros al thread
 
+
+    unsigned char buffer[256]; // Buffer to receive data
     // Esperar mensaje de Worker
-    bytes_read = read(socket_connection, buffer, BUFFER_SIZE);
+    int bytes_read = read(socket_connection, buffer, BUFFER_SIZE);
     if (bytes_read <= 0) {
         perror("Error leyendo data de worker");
         close(socket_connection);
@@ -557,40 +565,40 @@ void *handle_worker_connection(void *arg) {
     }
 
     // Parsear la informacion del nuevo Worker dentro de nuestro array global de workers
-    pthread_mutex_lock(&worker_mutex);
-    int index_worker = num_workers;     // Indice del worker con el que estamos trabajando
-    if (store_new_worker(result) == 0) {
+    pthread_mutex_lock(&globalInfo->worker_mutex);
+    int index_worker = globalInfo->num_workers;     // Indice del worker con el que estamos trabajando
+    if (store_new_worker(globalInfo, result) == 0) {
         free_tramaResult(result);
         close(socket_connection);
     }
-    workers[index_worker].socket_fd = socket_connection;   // Guardar socket del Worker
+    globalInfo->workers[index_worker].socket_fd = socket_connection;   // Guardar socket del Worker
     
     /* Comprobar si se debe asignar como worker principal */
     unsigned char *trama;
     // Comprobar tipo de Worker
-    if (strcmp(workers[index_worker].workerType, "Text") == 0) {
-        if (enigma_pworker_index == -1) {
-            enigma_pworker_index = index_worker;
+    if (strcmp(globalInfo->workers[index_worker].workerType, "Text") == 0) {
+        if (globalInfo->enigma_pworker_index == -1) {
+            globalInfo->enigma_pworker_index = index_worker;
             // Se le indica que es el worker principal en la trama
-            trama = crear_trama(TYPE_PRINCIPAL_WORKER, "");
+            trama = crear_trama(TYPE_PRINCIPAL_WORKER, (unsigned char*)"", strlen(""));
         } else {
             // Se le indica que no es el worker principal en la trama
-            trama = crear_trama(TYPE_CONNECT_WORKER_GOTHAM, "");
+            trama = crear_trama(TYPE_CONNECT_WORKER_GOTHAM, (unsigned char*)"", strlen(""));
         }
 
-    } else if (strcmp(workers[index_worker].workerType, "Media") == 0) {
-        if (harley_pworker_index == -1) {
-            harley_pworker_index = index_worker;
+    } else if (strcmp(globalInfo->workers[index_worker].workerType, "Media") == 0) {
+        if (globalInfo->harley_pworker_index == -1) {
+            globalInfo->harley_pworker_index = index_worker;
             // Se le indica que es el worker principal en la trama
-            trama = crear_trama(TYPE_PRINCIPAL_WORKER, "");
+            trama = crear_trama(TYPE_PRINCIPAL_WORKER, (unsigned char*)"", strlen(""));
         } else {
             // Se le indica que no es el worker principal en la trama
-            trama = crear_trama(TYPE_CONNECT_WORKER_GOTHAM, "");
+            trama = crear_trama(TYPE_CONNECT_WORKER_GOTHAM, (unsigned char*)"", strlen(""));
         }
     } else {
         printF("Not known type\n");
     }
-    pthread_mutex_unlock(&worker_mutex);
+    pthread_mutex_unlock(&globalInfo->worker_mutex);
 
     if (trama == NULL) {
         printF("Error en malloc para trama\n");
@@ -615,7 +623,7 @@ void *handle_worker_connection(void *arg) {
     enviar_heartbeat_constantemente(socket_connection);
 
     // Si acaba HEARTBEAT es porque se cerró la conexión y debemos limpiar el worker de la lista
-    remove_worker(socket_connection);   // Se indica Socket en vez de index porque el index puede variar si se elimina otro Worker antes
+    remove_worker(globalInfo, socket_connection);   // Se indica Socket en vez de index porque el index puede variar si se elimina otro Worker antes
 
     return NULL;
 }
