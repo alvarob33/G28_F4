@@ -132,6 +132,28 @@ void WORKER_print_config(Enigma_HarleyConfig* config) {
     printF("\n");
 }
 
+
+// LIBERAR MEMORIA 
+
+void cancel_and_wait_threads(pthread_t* subthreads, int num_subthreads) {
+
+    // Cerrar y liberar subthreads
+    for (int i = 0; i < num_subthreads; i++) {
+        if (pthread_cancel(subthreads[i]) != 0) {
+            perror("Error al cancelar el thread");
+        }
+        
+        // Esperamos a que el thread termine
+        if (pthread_join(subthreads[i], NULL) != 0) {
+            perror("Error al esperar el thread");
+        }
+    }
+    
+    free(subthreads);
+    num_subthreads = 0; 
+}
+
+
 /**
  * @brief Conecta un Worker (Enigma o Harley) al sistema Gotham.
  * 
@@ -189,12 +211,12 @@ int WORKER_connect_to_gotham(Enigma_HarleyConfig *config, int* isPrincipalWorker
 
     // Preparar la trama para enviar a Gotham
     char *data;
+    asprintf(&data, "%s&%s&%d", config->worker_type, config->ip_gotham, config->port_gotham);
     if (data == NULL) {
         printF("Error en malloc para data\n");
         close(sock_fd);
         return -1;
     }
-    asprintf(&data, "%s&%s&%d", config->worker_type, config->ip_gotham, config->port_gotham);
     
 
     unsigned char *trama = crear_trama(TYPE_CONNECT_WORKER_GOTHAM, (unsigned char*)data, strlen(data));
@@ -273,12 +295,14 @@ void* responder_gotham(void *arg) {
             if (bytes_read == 0) {
                 // El cliente cerró la conexión
                 printF("Gotham ha cerrado la conexión.\n");
+                raise(SIGINT);
+                return NULL;
             } else {
                 // Error en recv
                 perror("Error leyendo mensaje de Gotham.\n");
             }
             close(socket_fd);
-            pthread_exit(NULL);  // Terminar el thread si ocurre un error
+            return NULL;  // Terminar el thread si ocurre un error
         }
         buffer[bytes_read] = '\0'; // Asegurar que está null-terminado
         
@@ -287,7 +311,7 @@ void* responder_gotham(void *arg) {
         if (result == NULL)
         {
             printF("Error leyendo tramaa.\n");
-            pthread_exit(NULL);  // Terminar el hilo si ocurre un error
+            return NULL;  // Terminar el hilo si ocurre un error
         } 
         else 
         {
@@ -299,18 +323,19 @@ void* responder_gotham(void *arg) {
                 if (write(socket_fd, tramaEnviar, BUFFER_SIZE) < 0) {
                     perror("Error enviando respuesta al cliente");
                     close(socket_fd);
-                    pthread_exit(NULL);  // Terminar el hilo si ocurre un error
+                    return NULL;  // Terminar el hilo si ocurre un error
                 }
                 free(tramaEnviar);
             }
 
             //Si la trama es un mensaje Asignación de Worker principal
-            if (result->type == TYPE_PRINCIPAL_WORKER)
+            else if (result->type == TYPE_PRINCIPAL_WORKER)
             {
                 printF("Somos principal\n");
                 // Salimos para crear servidor de Flecks y convertirnos en Worker principal (Gestionado en harley.c o enigma.c)
                 return NULL;   
             }
+            
         }
         
     }
@@ -334,39 +359,7 @@ int WORKER_disconnect_from_gotham(int sock_fd, Enigma_HarleyConfig *config) {
         return -1;
     }
 
-    // Leer la respuesta de Gotham (opcional, dependiendo de si Gotham responde a desconexiones [hay que preguntar si es necesario])
-    
-    // char *response = (char *)malloc(BUFFER_SIZE);
-    // if (response == NULL) {
-    //     printF("Error en malloc para response\n");
-    //     free(data);
-    //     free(trama);
-    //     return -1;
-    // }
-
-    // int bytes_read = read(sock_fd, response, BUFFER_SIZE);
-    // if (bytes_read < 0) {
-    //     printF("Error leyendo la respuesta de Gotham\n");
-    //     free(data);
-    //     free(trama);
-    //     free(response);
-    //     return -1;
-    // }
-
-    // // Verificar la respuesta de Gotham
-    // if (response[0] == TYPE_ACK_DISCONNECT_WORKER_GOTHAM) {
-    //     printF("Successfully notified Gotham of disconnection\n");
-    // } else {
-    //     printF("Unexpected response from Gotham during disconnection\n");
-    //     free(data);
-    //     free(trama);
-    //     free(response);
-    //     return -1;
-    // }
-
-    // Liberar memoria dinámica
     free(trama);
-    // free(response);
 
     // Cerrar el socket
     if (sock_fd >= 0) {

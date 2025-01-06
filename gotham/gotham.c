@@ -12,25 +12,16 @@
 
 /* Variables globales */ 
 GlobalInfoGotham* globalInfo = NULL;
-int program_running = 1;
 
 // Funcion administra cierre de proceso padre
 void handle_sigint(/*int sig*/) {
 
-    printF("\nCerrando programa de manera segura...\n");
+    printF("\n\nCerrando programa de manera segura...\n");
 
-    // Liberar la memoria dinámica asignada
+    // CONFIG
     free(globalInfo->config->ip_fleck);
     free(globalInfo->config->ip_workers);
     free(globalInfo->config);
-
-
-    /* FLECK*/
-
-    // Enviar mensajes de desconexion a Flecks
-    //
-    
-    close_server(globalInfo->server_fleck);
 
 
     /* WORKER */
@@ -38,31 +29,41 @@ void handle_sigint(/*int sig*/) {
     // Enviar mensajes de desconexion a Workers
     //
 
+    printF("Liberando memoria workers...\n");
     close_server(globalInfo->server_worker);
 
-
     pthread_mutex_lock(&globalInfo->worker_mutex);
-
-    printF("Liberando memoria workers...\n");
-    // Liberar memoria de los workers
     liberar_memoria_workers(globalInfo);
-
     pthread_mutex_unlock(&globalInfo->worker_mutex);
 
-    // Destruir el mutex
-    pthread_mutex_destroy(&globalInfo->worker_mutex);
+    pthread_mutex_destroy(&globalInfo->worker_mutex);   // Destruir el mutex
+    printF("Memoria de los Workers liberada correctamente.\n\n");
 
-    free(globalInfo);
+
+    /* FLECK */
+
+    // Enviar mensajes de desconexion a Flecks
+    //
     
+    printF("Liberando memoria flecks...\n");
+    close_server(globalInfo->server_fleck);
 
-    printF("Recursos liberados correctamente. Saliendo...\n\n");
+    pthread_mutex_lock(&globalInfo->fleck_mutex);
+    liberar_memoria_flecks(globalInfo);
+    pthread_mutex_unlock(&globalInfo->fleck_mutex);
 
-    // Salir del programa
-    program_running = 0;
-    pthread_cancel(globalInfo->workers_server_thread);
-    pthread_cancel(globalInfo->fleck_server_thread);
+    pthread_mutex_destroy(&globalInfo->fleck_mutex);    // Destruir el mutex
+    printF("Memoria de los Flecks liberada correctamente.\n\n");
 
-    // exit(EXIT_SUCCESS);
+
+    // THREADS
+    cancel_and_wait_threads(globalInfo);
+    free(globalInfo);
+
+
+    printF("Recursos liberados correctamente. Saliendo...\n");
+    signal(SIGINT, SIG_DFL);
+    raise(SIGINT);
 }
 
 // Funcion para crear Servidor de Workers y administrar las conexiones entrantes
@@ -75,7 +76,7 @@ void* workers_server(/*void* arg*/) {
 
     printF("Esperando conexiones de Workers...\n");
     //Bucle para leer cada conexion que nos llegue de un worker
-    while (program_running)
+    while (1)
     {
         // Creamos struct con argumentos para pasarle al thread
         ThreadArgsGotham* args = malloc(sizeof(ThreadArgsGotham));
@@ -94,6 +95,20 @@ void* workers_server(/*void* arg*/) {
             if (pthread_create(&thread_id, NULL, handle_worker_connection, (void*)args) != 0) {
                 perror("Error al crear el hilo");
             }
+
+            // Guardar thread del fleck conectado
+            pthread_mutex_lock(&globalInfo->subthreads_mutex);
+            pthread_t* temp = (pthread_t*)realloc(globalInfo->subthreads, (globalInfo->num_subthreads +1) * sizeof(pthread_t));
+            if (temp == NULL) {
+                pthread_mutex_unlock(&globalInfo->subthreads_mutex);
+                free(args);
+                perror("Error al redimensionar el array de subthreads");
+                continue;
+            }
+            globalInfo->subthreads = temp;
+            globalInfo->subthreads[globalInfo->num_subthreads] = thread_id;
+            globalInfo->num_subthreads++;
+            pthread_mutex_unlock(&globalInfo->subthreads_mutex);
 
             // No esperamos a que el hilo termine, porque queremos seguir aceptando conexiones.
             pthread_detach(thread_id);
@@ -115,7 +130,7 @@ void* fleck_server(/*void* arg*/) {
 
     printF("Esperando conexiones de Flecks...\n");
     //Bucle para leer cada petición que nos llegue de un fleck
-    while (program_running)
+    while (1)
     {
         // Creamos struct con argumentos para pasarle al thread
         ThreadArgsGotham* args = malloc(sizeof(ThreadArgsGotham));
@@ -129,15 +144,49 @@ void* fleck_server(/*void* arg*/) {
         {
             args->global_info = globalInfo;
 
-            // Crear un hilo para manejar la conexión con el cliente
+            // Guardar socket del fleck conectado
+            pthread_mutex_lock(&globalInfo->fleck_mutex);
+            int* temp = (int*)realloc(globalInfo->fleck_sockets, (globalInfo->num_flecks +1) * sizeof(int));
+            if (temp == NULL) {
+                pthread_mutex_unlock(&globalInfo->fleck_mutex);
+                free(args);
+                perror("Error al redimensionar fleck_sockets");
+                continue;
+            }
+            globalInfo->fleck_sockets = temp;
+            globalInfo->fleck_sockets[globalInfo->num_flecks] = args->socket_connection;
+            globalInfo->num_flecks++;
+            pthread_mutex_unlock(&globalInfo->fleck_mutex);
+            
+
+            // Crear un thread para manejar la conexión con el cliente
             pthread_t thread_id;
             if (pthread_create(&thread_id, NULL, handle_fleck_connection, (void*)args) != 0) {
+                free(args);
                 perror("Error al crear el hilo");
+                continue;
             }
+
+            // Guardar thread del fleck conectado
+            pthread_mutex_lock(&globalInfo->subthreads_mutex);
+            pthread_t* temp2 = (pthread_t*)realloc(globalInfo->subthreads, (globalInfo->num_subthreads +1) * sizeof(pthread_t));
+            if (temp2 == NULL) {
+                pthread_mutex_unlock(&globalInfo->subthreads_mutex);
+                free(args);
+                perror("Error al redimensionar el array de subthreads");
+                continue;
+            }
+            globalInfo->subthreads = temp2;
+            globalInfo->subthreads[globalInfo->num_subthreads] = thread_id;
+            globalInfo->num_subthreads++;
+            pthread_mutex_unlock(&globalInfo->subthreads_mutex);
 
             // No esperamos a que el hilo termine, porque queremos seguir aceptando conexiones.
             pthread_detach(thread_id);
 
+        } else {
+            printF("Error accepting connection.\n");
+            free(args);
         }
 
     }
@@ -181,11 +230,19 @@ int main(int argc, char *argv[]) {
     globalInfo->harley_pworker_index = -1;    //Inicializamos en -1 indicando que no hay 
     pthread_mutex_init(&globalInfo->worker_mutex, NULL);
 
-    globalInfo->fleck_sockets = (int*)malloc(1 * sizeof(int));  //Inicializamos mem dinámica (para después poder hacer simplemente ralloc)
+    globalInfo->fleck_sockets = (int*)malloc(1 * sizeof(int));  //Inicializamos mem dinámica (para después poder hacer simplemente realloc)
     globalInfo->num_flecks = 0;
+    pthread_mutex_init(&globalInfo->fleck_mutex, NULL);
 
+    globalInfo->subthreads = malloc(globalInfo->num_subthreads * sizeof(pthread_t));    //Inicializamos mem dinámica (para después poder hacer simplemente realloc)
+    if (globalInfo->subthreads == NULL) {
+        perror("Error al asignar memoria para los hilos");
+        exit(EXIT_FAILURE);
+    }
+    globalInfo->num_subthreads = 0;
+    pthread_mutex_init(&globalInfo->subthreads_mutex, NULL);
 
-    //Creamos thread para servidores Fleck y Worker
+    //Creamos threads para servidores Fleck y Worker
 
     /* SERVIDOR WORKER */
     if (pthread_create(&globalInfo->workers_server_thread, NULL, workers_server, NULL) != 0) {

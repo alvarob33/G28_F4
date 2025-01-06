@@ -18,10 +18,10 @@ typedef struct {
 Enigma_HarleyConfig* WORKER_read_config(const char *config_file);
 void WORKER_print_config(Enigma_HarleyConfig* config);
 
+void cancel_and_wait_threads(pthread_t* subthreads, int num_subthreads);
+
 int WORKER_connect_to_gotham(Enigma_HarleyConfig *config, int* isPrincipalWorker);
-
 void* responder_gotham(void *arg);
-
 int WORKER_disconnect_from_gotham(int sock_fd, Enigma_HarleyConfig *config);
 
 #endif

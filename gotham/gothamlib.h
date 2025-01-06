@@ -34,6 +34,7 @@ typedef struct {
     Server* server_fleck;
     Server* server_worker;
 
+    // WORKER
     Worker* workers;           // Array donde almacenaremos los Workers conectados a Gotham
     int num_workers;
     int enigma_pworker_index;    // Indice del worker(Enigma) principal dentro del array de 'workers' (-1 si no hay)
@@ -41,13 +42,20 @@ typedef struct {
     // Mutex para cuando se modifiquen o lean las variables globales relacionadas con workers
     pthread_mutex_t worker_mutex;
 
-    //Lista de sockets de flecks
-    int* fleck_sockets;
+    // FLECK
+    int* fleck_sockets;         //Lista de sockets de flecks
     int num_flecks;
+    // Mutex para cuando se modifiquen o lean las variables globales relacionadas con workers
+    pthread_mutex_t fleck_mutex;
 
     // Threads de Workers y Fleck
     pthread_t workers_server_thread;
     pthread_t fleck_server_thread;
+
+    // Array de subthreads
+    pthread_t* subthreads;      // Threads generados por cada conexión Worker o Fleck
+    int num_subthreads;
+    pthread_mutex_t subthreads_mutex;
 
     
 } GlobalInfoGotham;
@@ -61,9 +69,12 @@ typedef struct {
 GothamConfig* GOTHAM_read_config(const char *config_file);
 void GOTHAM_show_config(GothamConfig* config);
 
+void liberar_memoria_workers(GlobalInfoGotham* globalInfo);
+void liberar_memoria_flecks(GlobalInfoGotham* globalInfo);
+void cancel_and_wait_threads(GlobalInfoGotham* globalInfo);
+
 void* handle_fleck_connection(void* client_socket);
 void* handle_worker_connection(void* client_socket);
 
-void liberar_memoria_workers();
 
 #endif

@@ -6,12 +6,9 @@
 #include "../worker/worker.h"
 #include "gothamlib.h"
 
-// extern Worker* workers;
-// extern int num_workers;
-// extern int enigma_pworker_index;
-// extern int harley_pworker_index;
-// extern pthread_mutex_t worker_mutex;
 
+
+// ARCHIVO CONFIGURACIÓN
 
 // Función para leer el archivo de configuración
 GothamConfig* GOTHAM_read_config(const char *config_file) {
@@ -96,6 +93,8 @@ void GOTHAM_show_config(GothamConfig* config) {
     free(buffer);
 }
 
+// LIBERAR MEMORIA
+
 // Se libera la memoria dinámica de un Worker y se cierra las conexión de este
 void liberar_memoria_worker(Worker worker) {
 
@@ -109,10 +108,10 @@ void liberar_memoria_worker(Worker worker) {
 
 }
 
-// Se libera la memoria de los structs
+// Se libera la memoria de los structs worker
 void liberar_memoria_workers(GlobalInfoGotham* globalInfo) {
     if (globalInfo->workers == NULL) {
-        printF("Workers es null\n");
+        // printF("No hay Workers conectados\n");
         return;
     }
 
@@ -120,10 +119,49 @@ void liberar_memoria_workers(GlobalInfoGotham* globalInfo) {
         liberar_memoria_worker(globalInfo->workers[i]);
     }
 
-    free(globalInfo->workers);  // Liberar el array dinámico de workers
-    printF("Memoria de los workers liberada correctamente.\n");
+    free(globalInfo->workers); 
 }
 
+void liberar_memoria_flecks(GlobalInfoGotham* globalInfo) {
+    if (globalInfo->fleck_sockets == NULL) {
+        // printF("No hay Flecks conectados\n");
+        return;
+    }
+
+    for (int i = 0; i < globalInfo->num_flecks; i++) {
+        if (globalInfo->fleck_sockets[i] > 0) {
+            close(globalInfo->fleck_sockets[i]);    // Cerrar socket Gotham-Fleck
+        }
+    }
+
+    free(globalInfo->fleck_sockets);  // Liberar el array de sockets de Flecks
+}
+
+void cancel_and_wait_threads(GlobalInfoGotham* globalInfo) {
+
+    // Cerrar y liberar subthreads
+    for (int i = 0; i < globalInfo->num_subthreads; i++) {
+        if (pthread_cancel(globalInfo->subthreads[i]) != 0) {
+            perror("Error al cancelar el thread");
+        }
+        
+        // Esperamos a que el thread termine
+        if (pthread_join(globalInfo->subthreads[i], NULL) != 0) {
+            perror("Error al esperar el thread");
+        }
+    }
+    
+    free(globalInfo->subthreads);
+    globalInfo->num_subthreads = 0; 
+
+
+    // Cerrar threads de Servidor_Workers y Servidor_Flecks
+    pthread_cancel(globalInfo->workers_server_thread);
+    pthread_cancel(globalInfo->fleck_server_thread);
+    
+    pthread_join(globalInfo->fleck_server_thread, NULL);
+    pthread_join(globalInfo->workers_server_thread, NULL);
+}
 
 void* handle_fleck_connection(void* void_args) {
     ThreadArgsGotham* args = (ThreadArgsGotham *)void_args;
@@ -399,12 +437,14 @@ int store_new_worker(GlobalInfoGotham* globalInfo, TramaResult* result) {
         }
 
     } else {
-        globalInfo->workers = realloc(globalInfo->workers, (globalInfo->num_workers + 1) * sizeof(Worker));
+        Worker* temp = realloc(globalInfo->workers, (globalInfo->num_workers + 1) * sizeof(Worker));
         if (globalInfo->workers == NULL) {
+            free(globalInfo->workers);
             pthread_mutex_unlock(&globalInfo->worker_mutex);
             perror("Failed to reallocate memory for workers array");
             return 0;
         }
+        globalInfo->workers = temp;
     }
 
     // Procesar data con el formato <workerType>&<IP>&<Port>
@@ -446,12 +486,14 @@ void remove_worker(GlobalInfoGotham* globalInfo, int socket_fd) {
     }
 
     globalInfo->num_workers--;
-    globalInfo->workers = realloc(globalInfo->workers, globalInfo->num_workers * sizeof(Worker));
+    Worker* temp = realloc(globalInfo->workers, globalInfo->num_workers * sizeof(Worker));
     if (globalInfo->workers == NULL && globalInfo->num_workers > 0) {
+        free(globalInfo->workers);
         perror("Error al realocar memoria para workers.");
         pthread_mutex_unlock(&globalInfo->worker_mutex);
         return;
     }
+    globalInfo->workers = temp;
 
     // Comprobar si era un Worker principal, y en dicho caso asignar a uno nuevo
     if (index == globalInfo->enigma_pworker_index) {
