@@ -147,7 +147,7 @@ void cancel_and_wait_threads(GlobalInfoGotham* globalInfo) {
         
         // Esperamos a que el thread termine
         if (pthread_join(globalInfo->subthreads[i], NULL) != 0) {
-            perror("Error al esperar el thread");
+            // perror("Error al esperar el thread");
         }
     }
     
@@ -589,9 +589,9 @@ void *handle_worker_connection(void *void_args) {
     free(void_args);    // Liberamos porque solo lo utilizamos para pasar parámetros al thread
 
 
-    unsigned char buffer[256]; // Buffer to receive data
+    unsigned char buffer[BUFFER_SIZE]; 
     // Esperar mensaje de Worker
-    int bytes_read = read(socket_connection, buffer, BUFFER_SIZE);
+    int bytes_read = recv(socket_connection, buffer, BUFFER_SIZE, 0);
     if (bytes_read <= 0) {
         perror("Error leyendo data de worker");
         close(socket_connection);

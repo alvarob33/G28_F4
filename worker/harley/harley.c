@@ -36,7 +36,7 @@ void handle_sigint(/*int sig*/) {
     // CERRAR CONEXIONES FLECKS
 
     // CERRAR THREADS
-    cancel_and_wait_threads(subthreads, num_subthreads);
+    WORKER_cancel_and_wait_threads(subthreads, num_subthreads);
     
     // Salir del programa
     signal(SIGINT, SIG_DFL);

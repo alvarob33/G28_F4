@@ -88,7 +88,7 @@ int FLECK_connect_to_gotham(FleckConfig *config) {
     // Configurar la dirección de Gotham
     struct sockaddr_in gotham_addr;
     gotham_addr.sin_family = AF_INET;
-    gotham_addr.sin_port = htons(config->gotham_port);
+    gotham_addr.sin_port = config->gotham_port;
 
     // Eliminar caracteres invisibles de la IP
     eliminar_caracteres(config->gotham_ip); // Asegurarnos de limpiar la IP
@@ -113,11 +113,11 @@ int FLECK_connect_to_gotham(FleckConfig *config) {
     printF("Conexión establecida con Gotham, enviando datos...\n");
 
     // Crear trama para enviar
-    unsigned char data[BUFFER_SIZE];
+    char* data;
     eliminar_caracteres(config->username); 
-    snprintf(data, sizeof(data), "%s&%s&%d", config->username, config->gotham_ip, config->gotham_port); // Formato: <username>&<IP>&<Port>
+    asprintf(&data, "%s&%s&%d", config->username, config->gotham_ip, config->gotham_port); // Formato: <username>&<IP>&<Port>
 
-    unsigned char *trama = crear_trama(TYPE_CONNECT_FLECK_GOTHAM, data); // Crear trama con TYPE = 0x01
+    unsigned char *trama = crear_trama(TYPE_CONNECT_FLECK_GOTHAM, (unsigned char*)data, strlen(data)); // Crear trama con TYPE = 0x01
     if (trama == NULL) {
         perror("Error al crear la trama");
         close(sock_fd);
@@ -198,7 +198,7 @@ void FLECK_handle_menu(FleckConfig *config) {
 
     WorkerFleck* worker_text = NULL;
     WorkerFleck* worker_media = NULL;
-    int num_workers = 0;
+    // int num_workers = 0;
     int socket_gotham = -1; // Socket de conexión con Gotham
 
     //  pthread_t heartbeat_thread; // Hilo para el heartbeat
@@ -421,16 +421,16 @@ void FLECK_handle_menu(FleckConfig *config) {
                 //printF("Thanks for using Mr. J System, see you soon, chaos lover :)\n");
 
                 if (socket_gotham != -1) {
-                unsigned char *trama = crear_trama(0x03, "LOGOUT");
+                    unsigned char *trama = crear_trama(TYPE_DISCONNECTION, (unsigned char*)"LOGOUT", strlen("LOGOUT"));
                     if (send(socket_gotham, trama, BUFFER_SIZE, 0) < 0) {
                         perror("Error enviando comando de logout a Gotham");
                     } else {
                         printF("Desconexión solicitada a Gotham.\n");
                     }
-                free(trama);
-                // pthread_cancel(heartbeat_thread);
-                close(socket_gotham);
-                socket_gotham = -1;
+                    free(trama);
+                    // pthread_cancel(heartbeat_thread);
+                    close(socket_gotham);
+                    socket_gotham = -1;
 
                 } else {
                     printF("No estás conectado a Gotham.\n");

@@ -6,7 +6,7 @@ void sendDistortGotham(char* filename, int socket_gotham, char* mediaType) {
     // Preparar trama de distorsión para Gotham
     char* data;
     asprintf(&data, "%s&%s", mediaType, filename);
-    unsigned char* trama = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, data);
+    unsigned char* trama = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, (unsigned char*)data, strlen(data));
 
     // Enviar trama de distorsión a Gotham
     if (write(socket_gotham, trama, BUFFER_SIZE) < 0) {
@@ -21,9 +21,8 @@ void sendDistortGotham(char* filename, int socket_gotham, char* mediaType) {
 
 TramaResult* receiveDistortGotham(int socket_gotham) {
     // Recibir respuesta de Gotham
-    char* buffer;
+    unsigned char buffer[BUFFER_SIZE];
     int bytes_read = recv(socket_gotham, buffer, BUFFER_SIZE, 0);
-    if (buffer == NULL) printF("Error trama nula recibida.\n");
     
     if (bytes_read <= 0) {
         if (bytes_read == 0) {
@@ -221,7 +220,7 @@ void* handle_distort_worker(void* arg) {
     WorkerFleck* worker = *distortInfo->worker_ptr;
 
     // DEBUGGING:
-    // printf("Conectando a Worker en %s:%s...\n", worker->IP, worker->Port);
+    printf("Conectando a Worker en %s:%s...\n", worker->IP, worker->Port);
 
     if (distortInfo->worker_ptr == NULL ) {
         perror("WorkerFleck** es NULL");
@@ -243,7 +242,7 @@ void* handle_distort_worker(void* arg) {
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr)); // Poner a 0 toda la estructura
     server_addr.sin_family = AF_INET;            // Familia de direcciones: IPv4
-    server_addr.sin_port = htons(atoi(worker->Port)); // Puerto del Worker (convertido a formato de red)
+    server_addr.sin_port = atoi(worker->Port); // Puerto del Worker (convertido a formato de red)
 
     // Convertir la IP de string a formato binario y configurarla
     if (inet_pton(AF_INET, worker->IP, &server_addr.sin_addr) <= 0) {
@@ -266,11 +265,19 @@ void* handle_distort_worker(void* arg) {
 
     // Calcular MD5SUM
     char* fileMD5SUM = calculate_md5sum(distortInfo->filename);
+    if (fileMD5SUM == NULL) {
+        printf("Error: Error en Fleck calculando el MD5SUM del archivo.\n");
+        return NULL;
+    }
+    fileMD5SUM[strlen(fileMD5SUM)] = '\0';
 
     char* data;
-    asprintf(&data, "%s&%s&", distortInfo->username, distortInfo->filename, fileSize, fileMD5SUM);
+    
+    asprintf(&data, "%s&%s&%s&%s", distortInfo->username, distortInfo->filename, fileSize, fileMD5SUM);
     printF(data);
-    // unsigned char* tramaEnviar = crear_trama(TYPE_HEARTBEAT, "OK");
+    printF("\n");
+    
+    // unsigned char* tramaEnviar = crear_trama(TYPE_HEARTBEAT, (unsigned char*)"OK", strlen("OK"));
     // if (write(socket_fd, tramaEnviar, BUFFER_SIZE) < 0) {
     //     perror("Error enviando respuesta al cliente");
     //     close(socket_fd);
@@ -280,7 +287,7 @@ void* handle_distort_worker(void* arg) {
     
 
     // Leer la respuesta del servidor 
-    // char response[1024];
+    // unsigned char buffer[BUFFER_SIZE];
     // int bytes_received = recv(worker->socket_fd, response, sizeof(response) - 1, 0);
     // if (bytes_received > 0) {
     //     response[bytes_received] = '\0'; // Terminar la cadena recibida

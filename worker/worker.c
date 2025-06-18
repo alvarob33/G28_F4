@@ -135,7 +135,7 @@ void WORKER_print_config(Enigma_HarleyConfig* config) {
 
 // LIBERAR MEMORIA 
 
-void cancel_and_wait_threads(pthread_t* subthreads, int num_subthreads) {
+void WORKER_cancel_and_wait_threads(pthread_t* subthreads, int num_subthreads) {
 
     // Cerrar y liberar subthreads
     for (int i = 0; i < num_subthreads; i++) {
@@ -211,7 +211,7 @@ int WORKER_connect_to_gotham(Enigma_HarleyConfig *config, int* isPrincipalWorker
 
     // Preparar la trama para enviar a Gotham
     char *data;
-    asprintf(&data, "%s&%s&%d", config->worker_type, config->ip_gotham, config->port_gotham);
+    asprintf(&data, "%s&%s&%d", config->worker_type, config->ip_gotham, config->port_fleck);    // Se envía port_fleck para que Gotham sepa el puerto al que se tendrán que conectar los Flecks con el Worker
     if (data == NULL) {
         printF("Error en malloc para data\n");
         close(sock_fd);

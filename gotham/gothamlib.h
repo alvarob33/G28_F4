@@ -25,7 +25,7 @@ typedef struct {
 typedef struct {
     char* workerType;
     char* IP;
-    char* Port;
+    char* Port;         // Puerto del servidor de Worker (utilizado para recibir conexiones de Flecks)
     int socket_fd;
 } Worker;
 
