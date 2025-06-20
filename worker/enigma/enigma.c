@@ -110,6 +110,8 @@ int main(int argc, char *argv[]) {
         printF("Esperando conexiones de Flecks...\n");
         // Aceptar una nueva conexión
         socket_connection = accept_connection(server_flecks);
+        printF("Aquí llegamos\n");
+
 
         // Crear un hilo para manejar la conexión con el cliente(Fleck)
         pthread_t thread_id;
@@ -132,4 +134,5 @@ int main(int argc, char *argv[]) {
     free(config);
 
     return 0;
+    
 }

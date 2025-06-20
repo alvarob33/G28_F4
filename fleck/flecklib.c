@@ -353,7 +353,7 @@ void FLECK_handle_menu(FleckConfig *config) {
                         }
                         distortInfo->worker_ptr = &worker_media;
                         
-                        // Crear hilo para enviar solicitud distort a Worker
+                        // Crear hilo para enviar solicitud distort a Worker MEDIA
                         if (pthread_create(&thread_id, NULL, handle_distort_worker, (void*)distortInfo) != 0) {
                             perror("Error al crear el hilo");
                         }
@@ -363,7 +363,7 @@ void FLECK_handle_menu(FleckConfig *config) {
                         if (store_new_worker(result, &worker_text, mediaType) < 1) continue;
                         distortInfo->worker_ptr = &worker_text;
 
-                        // Crear hilo para enviar solicitud distort a Worker
+                        // Crear hilo para enviar solicitud distort a Worker TEXT
                         if (pthread_create(&thread_id, NULL, handle_distort_worker, (void*)distortInfo) != 0) {
                             perror("Error al crear el hilo");
                         }

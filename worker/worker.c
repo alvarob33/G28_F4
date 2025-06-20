@@ -211,7 +211,7 @@ int WORKER_connect_to_gotham(Enigma_HarleyConfig *config, int* isPrincipalWorker
 
     // Preparar la trama para enviar a Gotham
     char *data;
-    asprintf(&data, "%s&%s&%d", config->worker_type, config->ip_gotham, config->port_fleck);    // Se envía port_fleck para que Gotham sepa el puerto al que se tendrán que conectar los Flecks con el Worker
+    asprintf(&data, "%s&%s&%d", config->worker_type, config->ip_fleck, config->port_fleck);    // Se envía port_fleck para que Gotham sepa el puerto al que se tendrán que conectar los Flecks con el Worker
     if (data == NULL) {
         printF("Error en malloc para data\n");
         close(sock_fd);

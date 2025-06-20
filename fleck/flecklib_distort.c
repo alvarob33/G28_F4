@@ -269,6 +269,7 @@ void* handle_distort_worker(void* arg) {
         printf("Error: Error en Fleck calculando el MD5SUM del archivo.\n");
         return NULL;
     }
+
     fileMD5SUM[strlen(fileMD5SUM)] = '\0';
 
     char* data;
@@ -301,9 +302,10 @@ void* handle_distort_worker(void* arg) {
 
     // Actualizar el estado del Worker
     worker->status = 100;  // Suponemos que el trabajo se completó con éxito
+
     // Cerrar la conexión
-    
+    close(worker->socket_fd);
+    printf("Conexión cerrada con el Worker %s:%s\n$ ", worker->IP, worker->Port);
     freeDistortInfo(distortInfo);
-    printf("Conexión cerrada con el Worker %s:%s\n", worker->IP, worker->Port);
     return NULL;
 }
