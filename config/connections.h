@@ -48,6 +48,7 @@ typedef struct {
     char type;
     char *timestamp;   // El timestamp en formato de string
     char *data;        // Los datos del mensaje
+    int data_length;  // Longitud de los datos válidos (en bytes)
 } TramaResult;
 
 // Funciones para crear servidor

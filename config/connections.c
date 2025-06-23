@@ -179,22 +179,22 @@ TramaResult* leer_trama(unsigned char *trama) {
 
 
     // Leer el campo data_length 
-    int data_length = (trama[1] << 8) | trama[2]; // Reconstruir la longitud de los datos
-    if (data_length > 247 || data_length < 0) {
+    result->data_length = (trama[1] << 8) | trama[2]; // Reconstruir la longitud de los datos
+    if (result->data_length > 247 || result->data_length < 0) {
         printF("Error: Longitud inválida.\n");
         free(result);
         return NULL;
     }
 
     // Reservar memoria dinámica para los datos, incluyendo el terminador nulo
-    result->data = (char *)malloc(data_length + 1); // +1 para el terminador nulo
+    result->data = (char *)malloc(result->data_length + 1); // +1 para el terminador nulo
     if (result->data == NULL) {
         printF("Error: No se pudo asignar memoria para los datos.\n");
         free(result);
         return NULL;
     }
-    strncpy(result->data, (char *)&trama[3], data_length); // Copiar los datos desde trama[3]
-    result->data[data_length] = '\0';
+    strncpy(result->data, (char *)&trama[3], result->data_length); // Copiar los datos desde trama[3]
+    result->data[result->data_length] = '\0';
 
     // Obtener el timestamp y guardarlo en TramaResult
     time_t timestamp = (trama[252] << 24) | (trama[253] << 16) | (trama[254] << 8) | trama[255];

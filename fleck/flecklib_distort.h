@@ -15,6 +15,8 @@
 
 #define READ_FILE_BUFFER_SIZE 4096 // Tamaño del buffer para leer el archivo
 
+#define O_BINARY 0
+
 
 void sendDistortGotham(char* filename, int socket_gotham, char* mediaType);
 TramaResult* receiveDistortGotham(int socket_gotham);

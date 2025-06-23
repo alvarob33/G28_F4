@@ -31,7 +31,7 @@ gotham.exe: config/config.o config/connections.o config/files.o gotham/gothamlib
 fleck.exe: config/config.o config/connections.o config/files.o fleck/flecklib_distort.o fleck/flecklib.o fleck/fleck.o
 	$(CC) $(INCLUDES) $^ -o $@ $(LDFLAGS)
 
-enigma.exe: config/config.o config/connections.o config/files.o worker/enigma/enigmalib.o worker/worker_distort.o worker/worker.o worker/enigma/enigma.o
+enigma.exe: config/config.o config/connections.o config/files.o worker/enigma/enigmalib.o worker/harley/harleylib.o worker/worker_distort.o worker/worker.o worker/enigma/enigma.o
 	$(CC) $(INCLUDES) $^ -o $@ $(LDFLAGS)
 
 harley.exe: config/config.o config/connections.o config/files.o worker/enigma/enigmalib.o worker/harley/harleylib.o worker/worker_distort.o worker/worker.o worker/harley/harley.o

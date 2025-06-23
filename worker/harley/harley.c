@@ -9,8 +9,10 @@ Enigma_HarleyConfig* config = NULL;
 int gotham_sock_fd = -1;
 Server* server_flecks = NULL;
 
-pthread_t* subthreads = NULL;      // Threads generados por cada conexión Fleck
-int num_subthreads = 0;
+ClientThread* threads = NULL;           // Threads generados por cada conexión Fleck
+// pthread_t* subthreads = NULL;      // Threads generados por cada conexión Fleck
+int num_threads = 0;
+int server_running = 0;
 
 // Funcion administra cierre de proceso correctamente
 void handle_sigint(/*int sig*/) {
@@ -37,7 +39,7 @@ void handle_sigint(/*int sig*/) {
     // CERRAR CONEXIONES FLECKS
 
     // CERRAR THREADS
-    WORKER_cancel_and_wait_threads(subthreads, num_subthreads);
+    WORKER_cancel_and_wait_threads(threads, num_threads);
     
     // Salir del programa
     signal(SIGINT, SIG_DFL);
@@ -118,37 +120,38 @@ int main(int argc, char *argv[]) {
     start_server(server_flecks);
 
     // Inicializamos subthreads
-    subthreads = malloc(num_subthreads * sizeof(pthread_t));    //Inicializamos mem dinámica (para después poder hacer simplemente realloc)
-    if (subthreads == NULL) {
-        perror("Error al asignar memoria para los hilos");
-        handle_sigint();
-    }
+    // subthreads = malloc(num_threads * sizeof(pthread_t));    //Inicializamos mem dinámica (para después poder hacer simplemente realloc)
+    // if (subthreads == NULL) {
+    //     perror("Error al asignar memoria para los hilos");
+    //     handle_sigint();
+    // }
 
     //Bucle para leer cada conexion que nos llegue de un fleck
     int socket_connection;
-    while (1)
+    server_running = 1;
+    while (server_running)
     {
         printF("Esperando conexiones de Flecks...\n");
         socket_connection = accept_connection(server_flecks);
 
+        ClientThread* new_threads = realloc(threads, (num_threads + 1) * sizeof(ClientThread));
+        if (!new_threads) {
+            close(socket_connection);
+            continue;
+        }
+
+        threads = new_threads;
+        threads[num_threads].socket = socket_connection;
+        threads[num_threads].active = 1;
+
         // Crear un hilo para manejar la conexión con el cliente(Fleck)
-        pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, handle_fleck_connection, (void*)&socket_connection) != 0) {
+        if (pthread_create(&threads[num_threads].thread_id, NULL, handle_fleck_connection, &threads[num_threads]) != 0) {
+            close(threads[num_threads].socket);
             perror("Error al crear el hilo");
             continue;
         }
 
-        pthread_t* temp = (pthread_t*)realloc(subthreads, (num_subthreads +1) * sizeof(pthread_t));
-        if (temp == NULL) {
-            perror("Error al redimensionar el array de subthreads");
-            continue;
-        }
-        subthreads = temp;
-        subthreads[num_subthreads] = thread_id;
-        num_subthreads++;
-
-        // No esperamos a que el hilo termine, porque queremos seguir aceptando conexiones.
-        pthread_detach(thread_id);
+        num_threads++;
 
     }
     close_server(server_flecks);

@@ -261,6 +261,7 @@ void* handle_distort_worker(void* arg) {
     DistortInfo* distortInfo = (DistortInfo*)arg; // Puntero a Worker* para igualarlo a NULL al final
     WorkerFleck* worker = *distortInfo->worker_ptr;
 
+
     if (distortInfo->worker_ptr == NULL ) {
         perror("WorkerFleck** es NULL");
         freeDistortInfo(distortInfo);
@@ -309,7 +310,12 @@ void* handle_distort_worker(void* arg) {
     // ---- Enviar archivo a Worker ----
     // Enviar el archivo al Worker mediante tramas de 256 bytes por trama
 
-    int fd = open(file_path, O_RDONLY);
+    int fd;
+    if (strcmp(worker->workerType, MEDIA) == 0) {
+        fd = open(file_path, O_RDONLY);
+    } else {
+        fd = open(file_path, O_RDONLY | O_BINARY);
+    }
     if (fd < 0) {
         perror("Error al abrir el archivo con open()");
         freeDistortInfo(distortInfo);
@@ -328,6 +334,7 @@ void* handle_distort_worker(void* arg) {
     worker->status = 0;
     while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
         // Enviar trama con fragmento del archivo
+        printF((char*) buffer);
         unsigned char* trama = crear_trama(TYPE_FILE_DATA, buffer, bytes_read);
         if (trama == NULL) {
             perror("Error al crear trama de archivo");
@@ -403,7 +410,8 @@ void* handle_distort_worker(void* arg) {
 
         bytes_sent += bytes_read;
         worker->status = (int)((bytes_sent * 100) / file_size*2);   // Por 2 porque se debe enviar y recibir
-        
+        // printF(itoa(worker->status));
+
         // DEBUGGING: Bajar velocidad de envío
         sleep(5);
     }

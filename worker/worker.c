@@ -135,22 +135,24 @@ void WORKER_print_config(Enigma_HarleyConfig* config) {
 
 // LIBERAR MEMORIA 
 
-void WORKER_cancel_and_wait_threads(pthread_t* subthreads, int num_subthreads) {
-
-    // Cerrar y liberar subthreads
-    for (int i = 0; i < num_subthreads; i++) {
-        if (pthread_cancel(subthreads[i]) != 0) {
-            perror("Error al cancelar el thread");
-        }
-        
-        // Esperamos a que el thread termine
-        if (pthread_join(subthreads[i], NULL) != 0) {
-            perror("Error al esperar el thread");
+// Cerrar y liberar subthreads de Flecks
+void WORKER_cancel_and_wait_threads(ClientThread* threads, int num_threads) {
+    for (int i = 0; i < num_threads; i++) {
+        if (threads[i].active) {
+            threads[i].active = 0; // Indica al hilo que debe terminar
+            
+            // Opcional: enviar señal al socket para desbloquear accept/read
+            shutdown(threads[i].socket, SHUT_RDWR);
+            
+            // Esperamos a que el thread se cierre de forma segura
+            if (pthread_join(threads[i].thread_id, NULL) != 0) {
+                perror("Error al esperar el thread");
+            }
+            close(threads[i].socket);
         }
     }
-    
-    free(subthreads);
-    num_subthreads = 0; 
+    free(threads);
+    num_threads = 0;
 }
 
 

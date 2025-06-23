@@ -11,14 +11,21 @@ typedef struct {
 } SharedData;
 
 // Función para manejar la distorsion del cliente
-void* handle_fleck_connection(void* client_socket) {
-    int socket_connection = *(int*)client_socket;
+void* handle_fleck_connection(void* arg) {
+    ClientThread* client = (ClientThread*)arg;
+
+    int socket_connection = client->socket;
     unsigned char response[BUFFER_SIZE];
     int bytes_received = 0;
     TramaResult *result;
     int fd_file;
     char* distorted_file_path = NULL;
     
+    // Punto Control
+    if (!client->active) {
+        close(socket_connection);
+        return NULL;
+    }
 
     // ---- 1. Recibir la solicitud inicial de distorsión ----
 
@@ -107,7 +114,16 @@ void* handle_fleck_connection(void* client_socket) {
     }
     free(ack_trama);
     
-    
+    // Punto Control
+    if (!client->active) {
+        free(md5sum);
+        free(filepath);
+        close(socket_connection);
+        return NULL;
+    }
+
+    char* fileType = file_type(filepath);
+
     if (shared->transfer_flag == 0) {
         printF("Recibiendo archivo DISTORT de Fleck.\n");
         
@@ -115,11 +131,21 @@ void* handle_fleck_connection(void* client_socket) {
         
         // 1. Abrir o crear el archivo donde se guardará la distorsión
         if (result->type == TYPE_START_DISTORT_FLECK_WORKER) {
-            // "write" (sobrescribir)
-            fd_file = open(filepath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (strcmp(fileType, MEDIA) == 0) {
+                // Modo binario para write (O_TRUNC + O_BINARY)
+                fd_file = open(filepath, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0644);
+            } else {
+                // Modo texto (sobrescribir)
+                fd_file = open(filepath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            }
         } else {
-            // "append" (añadir al final)
-            fd_file = open(filepath, O_WRONLY | O_CREAT | O_APPEND, 0644);
+            if (strcmp(fileType, MEDIA) == 0) {
+                // Modo binario para append (O_APPEND + O_BINARY)
+                fd_file = open(filepath, O_WRONLY | O_CREAT | O_APPEND | O_BINARY, 0644);
+            } else {
+                // Modo texto (append)
+                fd_file = open(filepath, O_WRONLY | O_CREAT | O_APPEND, 0644);
+            }
         }
         if (fd_file < 0) {
             perror("Error al abrir/crear archivo");
@@ -131,11 +157,20 @@ void* handle_fleck_connection(void* client_socket) {
 
         free_tramaResult(result);
 
+        // Punto Control
+        if (!client->active) {
+            free(md5sum);
+            free(filepath);
+            close(socket_connection);
+            return NULL;
+        }
+
         // 2. Recibir el archivo en fragmentos y guardarlo
         while (shared->total_bytes_received < filesize) {
+
             bytes_received = recv(socket_connection, response, BUFFER_SIZE, 0);
             if (bytes_received <= 0) {
-                perror("Error al recibir fragmento de archivo");
+                perror("Error al recibir fragmento de archivo, Fleck cerró la conexión.");
                 free(md5sum);
                 close(fd_file);
                 free(filepath);
@@ -154,10 +189,11 @@ void* handle_fleck_connection(void* client_socket) {
                 close(socket_connection);
                 return NULL;
             }
+            printF(result->data);
 
             // WRITE data al archivo
-            size_t bytes_written = write(fd_file, result->data, strlen(result->data));
-            if (bytes_written != strlen(result->data)) {
+            size_t bytes_written = write(fd_file, result->data, result->data_length);
+            if (bytes_written != (size_t)result->data_length) {
                 perror("Error escribiendo en archivo");
                 free_tramaResult(result);
 
@@ -183,8 +219,16 @@ void* handle_fleck_connection(void* client_socket) {
             }
             
             shared->total_bytes_received += bytes_written;
-
             free(ack_trama);            
+
+            // Punto Control
+            if (!client->active) {
+                free(md5sum);
+                close(fd_file);
+                free(filepath);
+                close(socket_connection);
+                return NULL;
+            }
         }
 
         // ---- Comprobar MD5 del archivo recibido ----
@@ -236,11 +280,17 @@ void* handle_fleck_connection(void* client_socket) {
 
         close(fd_file);
 
-        printF("Archivo DISTORT de Fleck recibido.\n");
+        printF("Archivo de Fleck recibido correctamente.\n");
 
+        // Punto Control
+        if (!client->active) {
+            free(filepath);
+            close(socket_connection);
+            return NULL;
+        }
 
         // 3. Distorsionar archivo
-        if (strcmp(file_type(filepath), MEDIA) == 0) {
+        if (strcmp(fileType, MEDIA) == 0) {
             printF("Distorsionando archivo de tipo MEDIA.\n");
         } else {
             printF("Distorsionando archivo de tipo TEXT.\n");
@@ -251,8 +301,15 @@ void* handle_fleck_connection(void* client_socket) {
                 return NULL;
             }
         } 
-
         free(filepath);
+
+        // Punto Control
+        if (!client->active) {
+            free(distorted_file_path);
+            close(socket_connection);
+            return NULL;
+        }
+
 
     } else {
         free_tramaResult(result);
