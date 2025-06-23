@@ -9,24 +9,7 @@
 #include <string.h>
 #include <pthread.h>
 
-// Estructura para almacenar la configuración de Fleck
-typedef struct {
-    char *username;   // Nombre de usuario 
-    char *user_dir;   // Directorio de usuario 
-    char *gotham_ip;  // Dirección IP de Gotham 
-    int gotham_port;  // Puerto de Gotham
-} FleckConfig;
-
-// Struct para almacenar Worker info (no se pueda llamar Worker porque ya se llama así en gothamlib.h)
-typedef struct {
-    char* IP;   // IP de Worker
-    char* Port;  // Puerto de Worker
-    char* workerType;
-    int socket_fd;
-
-    int status; // Estado de la distorsión en marcha [0-100%]
-} WorkerFleck;
-
+#include "structures.h"
 
 FleckConfig* FLECK_read_config(const char *config_file);
 

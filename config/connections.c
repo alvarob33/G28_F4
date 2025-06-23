@@ -23,7 +23,17 @@ Server* create_server(char* ip_addr, int port, int max_connections) {
         exit(EXIT_FAILURE);
     }
 
+    // Configurar opción SO_REUSEADDR para evitar "Address already in use"
+    int opt = 1;
+    if (setsockopt(server->server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("Error al configurar SO_REUSEADDR");
+        close(server->server_fd);
+        free(server);
+        exit(EXIT_FAILURE);
+    }
+
     // Configurar la dirección del servidor
+    memset(&server->address, 0, sizeof(server->address));
     server->address.sin_family = AF_INET;        // IPv4
     server->address.sin_addr.s_addr = inet_addr(ip_addr); // Aceptar conexiones en cualquier interfaz
     server->address.sin_port = port;     // Puerto en formato de red
@@ -32,7 +42,7 @@ Server* create_server(char* ip_addr, int port, int max_connections) {
 
     // Enlazar el file descriptor del socket a la dirección y puerto
     if (bind(server->server_fd, (struct sockaddr *)&server->address, sizeof(server->address)) < 0) {
-        perror("Error al enlazar el socket");
+        perror("Error al enlazar el socket servidor");
         close(server->server_fd);
         exit(EXIT_FAILURE);
     }
@@ -88,6 +98,7 @@ int accept_connection(Server *server) {
     return new_socket;
 }
 
+// POST: se debe hacer free() de la trama devuelta
 unsigned char* crear_trama(int TYPE, unsigned char* data, size_t data_length) {
     // Preparar la trama para enviar
     // [1B] TYPE, [2B] DATA_LENGTH, [247B] DATA, [2B] CHECKSUM, [4B] TIMESTAMP

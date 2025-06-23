@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 
-#include "worker.h"
+#include "../worker/worker.h"
+#include "../worker/worker_distort.h"
 #include "harleylib.h"
 
 // VARIABLES GLOBALES

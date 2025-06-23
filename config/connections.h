@@ -16,6 +16,8 @@
 #define HEARTBEAT "HEARTBEAT"
 #define HEARTBEAT_SLEEP_TIME 5
 #define OK_MSG "OK"
+#define CHECK_OK "CHECK_OK"
+#define CHECK_KO "CHECK_KO"
 #define BUFFER_SIZE 256
 
 /* CONNECTION TYPEs */
@@ -23,10 +25,11 @@
 #define TYPE_CONNECT_WORKER_GOTHAM 0x02         // Conexiones entre Worker y Gotham
 #define TYPE_DISTORT_FLECK_GOTHAM 0x10          // Peticiones distort entre Fleck y Gotham
 #define TYPE_RESUME_DISTORT_FLECK_GOTHAM 0x11   // Resumir distorsión entre Fleck y Gotham
-#define TYPE_START_DISTORT_FLECK_WORKER 0x03    // Empezar a enviar archivo para distorsionar, de Fleck a Worker
+#define TYPE_START_DISTORT_FLECK_WORKER 0x03    // Empezar a enviar archivo para distorsionar (de Fleck a Worker)
+#define TYPE_RESUME_DISTORT_FLECK_WORKER 0x13   // Continuar con distorsión (de Fleck a Worker)
 #define TYPE_START_DISTORT_WORKER_FLECK 0x04    // Empezar a enviar archivo distorsionado, de Worker a Fleck
 #define TYPE_FILE_DATA 0x05                     // Envío de archivos 
-#define TYPE_END_DISTORT_FLECK_WORKER 0x04      // Envío de archivo finalizado
+#define TYPE_END_DISTORT_FLECK_WORKER 0x06      // Envío de archivo finalizado
 #define TYPE_DISCONNECTION 0x07                 // Desconexión de cualquier tipo
 #define TYPE_PRINCIPAL_WORKER 0x08              // Asignación de un nuevo Worker principal
 #define TYPE_ERROR 0x09                         // Error recibiendo la trama

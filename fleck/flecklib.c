@@ -188,8 +188,6 @@ int FLECK_connect_to_gotham(FleckConfig *config) {
 
 }
 
-/* DISTORT */ 
-
 
 // Función para manejar el menú de opciones
 void FLECK_handle_menu(FleckConfig *config) {
@@ -288,9 +286,11 @@ void FLECK_handle_menu(FleckConfig *config) {
                 continue;
             }
 
+            distortInfo->socket_gotham = socket_gotham; // Guardamos el socket de conexión con Gotham
             distortInfo->username = strdup(config->username);
-            distortInfo->filename = strdup(strtok(NULL, " "));
-            distortInfo->distortion_factor = strdup(strtok(NULL, " "));
+            distortInfo->user_dir = strdup(config->user_dir);
+            distortInfo->filename = strdup(strtok(NULL, " \t\n"));
+            distortInfo->distortion_factor = strdup(strtok(NULL, " \t\n"));
             char *extra = strtok(NULL, " \t\n");
 
             if (distortInfo->filename && distortInfo->distortion_factor && extra == NULL) {
@@ -300,88 +300,53 @@ void FLECK_handle_menu(FleckConfig *config) {
                 char* mediaType = file_type(distortInfo->filename);
                 if (mediaType == NULL) {
                     printF("Cancelando: Media type no reconocido.\n");
+                    freeDistortInfo(distortInfo); 
                     continue;
                 }
 
                 if (strcmp(mediaType, MEDIA) == 0 && worker_media != NULL)
                 {
                     printF("Cancelando: Ya hay una distorsión 'Media' en curso.\n");
+                    freeDistortInfo(distortInfo);
                     continue;
                 } else if (strcmp(mediaType, TEXT) == 0 && worker_text != NULL)
                 {
                     printF("Cancelando: Ya hay una distorsión 'Text' en curso.\n");
+                    freeDistortInfo(distortInfo);
                     continue;
                 } 
 
-                // Enviar petición de distort a Gotham (y guardar mediaType del archivo)
-                sendDistortGotham(distortInfo->filename, socket_gotham, mediaType);
-                //Leer respuesta de Gotham como trama
-                TramaResult* result = receiveDistortGotham(socket_gotham);
-                if (result == NULL) {
-                    perror("Error leyendo trama.\n");
-                    continue;
-                }
-
-                // Comprobar si la trama es un mensaje DISTORT
-                if (result->type == TYPE_DISTORT_FLECK_GOTHAM)
+                pthread_t thread_id;
+                // Crear hilo para enviar solicitud distort
+                if (strcmp(mediaType, MEDIA))
                 {
-                    // Si no hay Workers de nuestro tipo disponibles salir
-                    if (strcmp(result->data, "DISTORT_KO") == 0) {
-                        asprintf(&buffer, "No hay Workers de %s disponibles.\n", mediaType);
-                        printF(buffer);
-                        free_tramaResult(result);
-                        continue;
-                    } // Si el media no fue reconocido por Gotham salir
-                    else if (strcmp(result->data, "MEDIA_KO") == 0)
+                    if (request_distort_gotham(socket_gotham, mediaType, &worker_media, distortInfo) > 0)
                     {
-                        asprintf(&buffer, "Media type '%s' no reconocido.\n", mediaType);
-                        printF(buffer);
-                        free_tramaResult(result);
-                        continue;
-                    }
-                    
-
-                    // Si hay Worker disponible
-                    ///
-                    pthread_t thread_id;
-                    if (strcmp(mediaType, MEDIA))
-                    {
-                        // Guardar info Worker
-                        if (store_new_worker(result, &worker_media, mediaType) < 1) {
-                            perror("Error al guardar el WorkerFleck");
-                            continue;
-                        }
-                        distortInfo->worker_ptr = &worker_media;
-                        
-                        // Crear hilo para enviar solicitud distort a Worker MEDIA
                         if (pthread_create(&thread_id, NULL, handle_distort_worker, (void*)distortInfo) != 0) {
                             perror("Error al crear el hilo");
                         }
-                    } else if (strcmp(mediaType, TEXT))
+                    } else {
+                        perror("Error solicitando distort a Gotham.\n");
+                        freeDistortInfo(distortInfo);
+                        continue;
+                    }
+                } else if (strcmp(mediaType, TEXT))
+                {
+                    if (request_distort_gotham(socket_gotham, mediaType, &worker_text, distortInfo) > 0)
                     {
-                        // Guardar info Worker
-                        if (store_new_worker(result, &worker_text, mediaType) < 1) continue;
-                        distortInfo->worker_ptr = &worker_text;
-
-                        // Crear hilo para enviar solicitud distort a Worker TEXT
                         if (pthread_create(&thread_id, NULL, handle_distort_worker, (void*)distortInfo) != 0) {
                             perror("Error al crear el hilo");
                         }
+                    } else {
+                        perror("Error solicitando distort a Gotham.\n");
+                        freeDistortInfo(distortInfo);
+                        continue;
                     }
-                    
-                    // No esperamos a que el hilo termine, porque queremos seguir pudiendo generar conexiones.
-                    pthread_detach(thread_id);
-                    
-                    
-                } else {
-                    perror("Error: El mensaje recibido de Gotham es inesperado.\n");
-                    free_tramaResult(result);
-                    continue;
                 }
                 
 
-
             } else {
+                freeDistortInfo(distortInfo); // Liberar memoria si los argumentos son incorrectos
                 printF("Commando Incorrecto.\n");
                 printF("Uso: distort <filename> <factor>\n");
             }

@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 
 #include "../worker/worker.h"
+#include "../worker/worker_distort.h"
 #include "enigmalib.h"
 
 Enigma_HarleyConfig* config = NULL;
@@ -93,24 +94,23 @@ int main(int argc, char *argv[]) {
         perror("Error desvinculando el hilo");
         return -1;
     }
-
+    
     /* SERVIDOR WORKER-FLECKS */
     // Crear nuevo servidor para conexiones con Fleck
     
     // Configurar servidor
     int socket_connection;
-
+    
     server_flecks = create_server(config->ip_fleck, config->port_fleck, 10);
     start_server(server_flecks);
-
-
+    
+    
     //Bucle para leer cada conexion que nos llegue de un fleck
     while (1)
     {
         printF("Esperando conexiones de Flecks...\n");
         // Aceptar una nueva conexión
         socket_connection = accept_connection(server_flecks);
-        printF("Aquí llegamos\n");
 
 
         // Crear un hilo para manejar la conexión con el cliente(Fleck)
