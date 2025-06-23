@@ -11,11 +11,54 @@
 const char* const MEDIA_EXTENSIONS[] = {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".wav", NULL}; //.wav es audio
 const char* const TEXT_EXTENSIONS[] = {".txt", ".md", ".log", ".csv", NULL};
 
-// Función para leer una línea hasta el carácter indicado
+// // Función para leer una línea hasta el carácter indicado
+// char* read_until(int fd, char end) {
+//     int i = 0, size;
+//     char c = '\0';
+//     char *string = (char *)malloc(sizeof(char)); // Inicialmente una cadena de un solo carácter
+
+//     if (string == NULL) {
+//         perror("Error en malloc");
+//         return NULL;
+//     }
+
+//     while (1) {
+//         size = read(fd, &c, sizeof(char));  // Leemos un carácter del archivo
+
+//         if (size == -1) {
+//             perror("Error al leer el archivo");
+//             free(string);
+//             return NULL; // Error en la lectura
+//         } else if (size == 0) { // EOF
+//             if (i == 0) {
+//                 free(string); // Liberar la memoria
+//                 return NULL;  // Indicar EOF
+//             }
+//             break;
+//         }
+
+//         if (c != end) {
+//             char* tmp = (char *)realloc(string, sizeof(char) * (i + 2)); // Añadir espacio para un nuevo carácter
+//             if (tmp == NULL) {
+//                 perror("Error en realloc");
+//                 free(string); // Liberar la memoria original en caso de fallo
+//                 return NULL;
+//             }
+//             string = tmp;
+//             string[i++] = c; // Guardamos el carácter
+//         } else {
+//             break; // Terminamos si encontramos el delimitador
+//         }
+//     }
+
+//     string[i] = '\0'; // Finalizamos la cadena
+//     return string;    // Devolvemos la cadena leída
+// }
+
 char* read_until(int fd, char end) {
     int i = 0, size;
     char c = '\0';
-    char *string = (char *)malloc(sizeof(char)); // Inicialmente una cadena de un solo carácter
+    char *string = (char *)malloc(1);
 
     if (string == NULL) {
         perror("Error en malloc");
@@ -23,37 +66,45 @@ char* read_until(int fd, char end) {
     }
 
     while (1) {
-        size = read(fd, &c, sizeof(char));  // Leemos un carácter del archivo
+        size = read(fd, &c, sizeof(char));
 
         if (size == -1) {
             perror("Error al leer el archivo");
             free(string);
-            return NULL; // Error en la lectura
+            return NULL;
         } else if (size == 0) { // EOF
             if (i == 0) {
-                free(string); // Liberar la memoria
-                return NULL;  // Indicar EOF
+                free(string);
+                return NULL;
             }
             break;
         }
 
-        if (c != end) {
-            char* tmp = (char *)realloc(string, sizeof(char) * (i + 2)); // Añadir espacio para un nuevo carácter
-            if (tmp == NULL) {
-                perror("Error en realloc");
-                free(string); // Liberar la memoria original en caso de fallo
-                return NULL;
-            }
-            string = tmp;
-            string[i++] = c; // Guardamos el carácter
-        } else {
-            break; // Terminamos si encontramos el delimitador
+        if (c == end) {
+            break;
         }
+
+        char *tmp = realloc(string, i + 2);
+        if (tmp == NULL) {
+            perror("Error en realloc");
+            free(string);
+            return NULL;
+        }
+
+        string = tmp;
+        string[i++] = c;
     }
 
-    string[i] = '\0'; // Finalizamos la cadena
-    return string;    // Devolvemos la cadena leída
+    string[i] = '\0';
+
+    // Limpiar \r y \n finales si existen
+    while (i > 0 && (string[i - 1] == '\r' || string[i - 1] == '\n')) {
+        string[--i] = '\0';
+    }
+
+    return string;
 }
+
 
 // Función para eliminar los carácteres '&' de una cadena
 void remove_ampersand(char *str) {
