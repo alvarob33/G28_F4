@@ -234,7 +234,7 @@ void freeDistortInfo(DistortInfo* distortInfo) {
 int connect_with_worker(WorkerFleck* worker) {
     
     // DEBUGGING:
-    printf("Conectando a Worker en %s:%s...\n", worker->IP, worker->Port);
+    //printf("Conectando a Worker en %s:%s...\n", worker->IP, worker->Port);
 
     
     // Crear socket de conexión con Worker
