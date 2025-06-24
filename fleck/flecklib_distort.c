@@ -827,7 +827,7 @@ void* handle_distort_worker(void* arg) {
         worker->status = 50 + (int)((total_bytes_received)*50 / distorted_filesize); // 50-100%
 
         // DEBUGGING: Bajar velocidad de recepción
-        usleep(100000);
+        usleep(1000000);
     }
 
     close(fd_distorted);

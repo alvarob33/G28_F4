@@ -9,6 +9,16 @@
 
 // ARCHIVO CONFIGURACIÓN
 
+
+
+void GOTHAM_free_config(GothamConfig* config) {
+    if (config) {
+        free(config->ip_fleck);
+        free(config->ip_workers);
+        free(config);
+    }
+}
+
 /***********************************************
 *
 * @Finalitat: Llegir i parsejar el fitxer de configuració de Gotham.
@@ -221,6 +231,10 @@ void* handle_fleck_connection(void* void_args) {
 
     unsigned char buffer[BUFFER_SIZE];
     int bytes_read;
+    char *username = NULL, *ip = NULL, *port = NULL;
+    char *mediaType = NULL, *fileName = NULL;
+    char *mensaje = NULL;
+
 
     // Leer constantemente las tramas de Fleck (hasta que desconecte)
     while ((bytes_read = recv(socket_fd, buffer, BUFFER_SIZE, 0)) > 0) {
@@ -238,17 +252,22 @@ void* handle_fleck_connection(void* void_args) {
         /* Validar el TYPE de la trama */
         if (result->type == TYPE_CONNECT_FLECK_GOTHAM) 
         {  
+            // Liberar cualquier asignación previa
+            free(username); free(ip); free(port);
+            username = ip = port = NULL;
+
             // Comando CONNECT
             printF("Comando CONNECT recibido de Fleck.\n");
 
             // Parsear los datos: <username>&<IP>&<Port> (duplicándolos para poder liberar memoria de result)
-            char *username = strdup(strtok(result->data, "&"));
-            char *ip = strdup(strtok(NULL, "&"));
-            char *port = strdup(strtok(NULL, "&"));
+            username = strdup(strtok(result->data, "&"));
+            ip = strdup(strtok(NULL, "&"));
+            port = strdup(strtok(NULL, "&"));
 
             if (username && ip && port) {
+                free(mensaje);
                 //PRINTF
-                char *mensaje = NULL;
+                mensaje = NULL;
                 asprintf(&mensaje, "Fleck conectado: %s, IP: %s, Puerto: %s\n", username, ip, port);
                 printf(mensaje);
                 log_event(globalInfo, mensaje);
@@ -272,15 +291,20 @@ void* handle_fleck_connection(void* void_args) {
                 free(response);
                 printF("Formato de conexión inválido. Respuesta CON_KO enviada.\n");
             }
+            free_tramaResult(result);
+
         } else if (result->type == TYPE_DISTORT_FLECK_GOTHAM) 
         {
             // Comando DISTORT
             printF("Comando DISTORT recibido de Fleck.\n");
             log_event(globalInfo, "Comando DISTORT recibido de Fleck.");
             
+            free(mediaType); free(fileName);
+            mediaType = fileName = NULL;
+
             // Parsear los datos: <mediaType>&<fileName> (duplicándolos para poder liberar memoria de result)
-            char *mediaType = strdup(strtok(result->data, "&"));
-            char *fileName = strdup(strtok(NULL, "&"));
+            mediaType = strdup(strtok(result->data, "&"));
+            fileName = strdup(strtok(NULL, "&"));
 
             free_tramaResult(result); // Liberar la trama procesada
 
@@ -639,6 +663,8 @@ void *handle_worker_connection(void *void_args) {
         }
     } else {
         printF("Not known type\n");
+        pthread_mutex_unlock(&globalInfo->worker_mutex);
+        return NULL;
     }
     pthread_mutex_unlock(&globalInfo->worker_mutex);
 

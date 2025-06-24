@@ -21,6 +21,17 @@ OBJECTS = $(SOURCES:.c=.o)
 
 EXECUTABLES = gotham.exe fleck.exe harley.exe enigma.exe arkham.exe
   
+# Modo de compilación (normal o debug)
+BUILD_MODE ?= normal
+
+ifeq ($(BUILD_MODE),debug)
+    CFLAGS += -g -O0
+    LDFLAGS += -g
+else
+    CFLAGS += -O2
+endif
+
+
 all: $(EXECUTABLES)
 
 # Regla para compilar cada archivo objeto
@@ -44,5 +55,9 @@ arkham.exe: config/connections.o config/config.o arkham/arkham.o
 
 clean:
 	rm -f $(OBJECTS) $(EXECUTABLES)
+
+
+debug:
+	$(MAKE) BUILD_MODE=debug
 
 .PHONY: all clean

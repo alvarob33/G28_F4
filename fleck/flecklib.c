@@ -425,7 +425,7 @@ void FLECK_handle_menu(FleckConfig *config) {
                 char *extra = strtok(NULL, " \t\n");
                 if (extra == NULL) {
                     printF("Command OK\n");
-                    mostrar_estado_workers(worker_text, worker_media);
+                    mostrar_estado_workers(worker_media, worker_text);
                 } else {
                     printF("Unknown command\n");
                 }

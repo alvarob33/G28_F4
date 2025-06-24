@@ -24,3 +24,35 @@
 
 [Tue Jun 24 22:26:44 2025] Comando DISTORT recibido de Fleck.
 [Tue Jun 24 22:26:44 2025] Respuesta con Worker Harley pricipal enviado a Fleck.
+[Tue Jun 24 23:16:04 2025] Sistema Gotham iniciado
+[Tue Jun 24 23:16:04 2025] Servidor para Workers iniciado
+[Tue Jun 24 23:16:04 2025] Servidor para Flecks iniciado.
+[Tue Jun 24 23:17:22 2025] Fleck conectado: Arthur, IP: 172.16.214.21, Puerto: 9183
+
+[Tue Jun 24 23:17:42 2025] New worker added: workerType=Media, IP=172.16.214.18, Port=9182
+
+[Tue Jun 24 23:18:00 2025] Comando DISTORT recibido de Fleck.
+[Tue Jun 24 23:18:00 2025] Respuesta con Worker Harley pricipal enviado a Fleck.
+[Tue Jun 24 23:37:42 2025] Sistema Gotham iniciado
+[Tue Jun 24 23:37:42 2025] Servidor para Workers iniciado
+[Tue Jun 24 23:37:42 2025] Servidor para Flecks iniciado.
+[Tue Jun 24 23:38:04 2025] New worker added: workerType=Text, IP=172.16.214.18, Port=9182
+
+[Tue Jun 24 23:38:09 2025] Fleck conectado: Arthur, IP: 172.16.214.21, Puerto: 9183
+
+[Tue Jun 24 23:38:20 2025] Comando DISTORT recibido de Fleck.
+[Tue Jun 24 23:38:20 2025] Respuesta con Worker Enigma pricipal enviado a Fleck.
+[Tue Jun 24 23:39:29 2025] No hay Workers de tipo 'Text' para asignar como Principal Worker.
+[Tue Jun 24 23:39:39 2025] New worker added: workerType=Text, IP=172.16.214.18, Port=9182
+
+[Tue Jun 24 23:39:42 2025] Fleck conectado: Arthur, IP: 172.16.214.21, Puerto: 9183
+
+[Tue Jun 24 23:39:52 2025] Comando DISTORT recibido de Fleck.
+[Tue Jun 24 23:39:52 2025] Respuesta con Worker Enigma pricipal enviado a Fleck.
+[Tue Jun 24 23:41:01 2025] No hay Workers de tipo 'Text' para asignar como Principal Worker.
+[Tue Jun 24 23:41:11 2025] New worker added: workerType=Text, IP=172.16.214.18, Port=9182
+
+[Tue Jun 24 23:41:16 2025] Fleck conectado: Arthur, IP: 172.16.214.21, Puerto: 9183
+
+[Tue Jun 24 23:41:24 2025] Comando DISTORT recibido de Fleck.
+[Tue Jun 24 23:41:24 2025] Respuesta con Worker Enigma pricipal enviado a Fleck.
