@@ -1,8 +1,16 @@
-
-
 #include "flecklib_distort.h"
 #include "../config/files.h"
 
+/***********************************************
+*
+* @Finalitat: Preparar i enviar a Gotham una trama de petició de distorsió amb nom de fitxer i tipus de media.
+* @Parametres:
+*   in: filename      = nom del fitxer a distorsionar.
+*   in: socket_gotham = descriptor del socket Gotham.
+*   in: mediaType     = tipus de fitxer ("Media" o "Text").
+* @Retorn: ---
+*
+************************************************/
 void sendDistortGotham(char* filename, int socket_gotham, char* mediaType) {
     // Preparar trama de distorsión para Gotham
     char* data;
@@ -20,6 +28,14 @@ void sendDistortGotham(char* filename, int socket_gotham, char* mediaType) {
     free(data);
 }
 
+/***********************************************
+*
+* @Finalitat: Rebre la resposta de Gotham a una petició de distorsió i convertir-la en TramaResult.
+* @Parametres:
+*   in: socket_gotham = descriptor del socket Gotham.
+* @Retorn: Punter a TramaResult amb la resposta, o NULL si hi ha error.
+*
+************************************************/
 TramaResult* receiveDistortGotham(int socket_gotham) {
     // Recibir respuesta de Gotham
     unsigned char buffer[BUFFER_SIZE];
@@ -39,7 +55,16 @@ TramaResult* receiveDistortGotham(int socket_gotham) {
     return leer_trama(buffer);
 }
 
-// Función para almacenar en sruct Worker la información de la trama recibida por Gotham para distorsión
+/***********************************************
+*
+* @Finalitat: Emmagatzemar en el struct WorkerFleck la IP i port extrets de la trama rebuda per Gotham per distorsionar.
+* @Parametres:
+*   in:  result    = TramaResult amb "IP&Port".
+*   in/out: worker = punter a WorkerFleck* que es crea.
+*   in:  workerType = tipus de worker ("Media" o "Text").
+* @Retorn: 1 en èxit, 0 en error.
+*
+************************************************/
 int store_new_worker(TramaResult* result, WorkerFleck** worker, char* workerType) {
     
     // Crear nuevo worker dinámico
@@ -71,7 +96,17 @@ int store_new_worker(TramaResult* result, WorkerFleck** worker, char* workerType
     return 1;
 }
 
-// Enviar petición de distort a Gotham y guardar informacion del Worker asignado por Gotham en distortInfo
+/***********************************************
+*
+* @Finalitat: Enviar la petició de distorsió a Gotham i guardar informació del Worker asignat per Gotham en distortInfo
+* @Parametres:
+*   in:  socket_gotham = descriptor del socket Gotham.
+*   in:  mediaType     = tipus de fitxer.
+*   in/out: worker     = punter a WorkerFleck* on guardar resultats.
+*   in/out: distortInfo= informació de la distorsió.
+* @Retorn: 1 si s’assigna worker, -1 en cas de KO o error.
+*
+************************************************/
 int request_distort_gotham(int socket_gotham, char* mediaType, WorkerFleck** worker, DistortInfo* distortInfo) {
     // Enviar petición de distort a Gotham (y guardar mediaType del archivo)
     sendDistortGotham(distortInfo->filename, socket_gotham, mediaType);
@@ -105,7 +140,6 @@ int request_distort_gotham(int socket_gotham, char* mediaType, WorkerFleck** wor
         
 
         // Si hay Worker disponible
-        ///
         
         // Guardar info Worker
         if (store_new_worker(result, worker, mediaType) < 1) {
@@ -123,6 +157,14 @@ int request_distort_gotham(int socket_gotham, char* mediaType, WorkerFleck** wor
     }
 }
 
+/***********************************************
+*
+* @Finalitat: Alliberar la memòria i tancar el socket d’un WorkerFleck quan ja no és necessari.
+* @Parametres:
+*   in/out: worker = punter a WorkerFleck* a eliminar.
+* @Retorn: --- (posa *worker a NULL).
+*
+************************************************/
 void freeWorkerFleck(WorkerFleck** worker) {
     // Liberar la memoria de WorkerFleck* si worker no es NULL
     if ((*worker) != NULL) {
@@ -149,6 +191,14 @@ void freeWorkerFleck(WorkerFleck** worker) {
     }
 }
 
+/***********************************************
+*
+* @Finalitat: Alliberar tots els camps de DistortInfo incloent WorkerFleck i la pròpia estructura.
+* @Parametres:
+*   in: distortInfo = punter a DistortInfo a eliminar.
+* @Retorn: ---.
+*
+************************************************/
 void freeDistortInfo(DistortInfo* distortInfo) {
     if (distortInfo == NULL) {
         return;  // Si el puntero es NULL, no hacemos nada
@@ -173,10 +223,18 @@ void freeDistortInfo(DistortInfo* distortInfo) {
 
 
 // ---- Conectar con servidor Worker ----
+/***********************************************
+*
+* @Finalitat: Establir connexió TCP amb el WorkerFleck a la seva IP i port.
+* @Parametres:
+*   in: worker = punter a WorkerFleck amb IP i Port.
+* @Retorn: 1 en èxit, -1 en error.
+*
+************************************************/
 int connect_with_worker(WorkerFleck* worker) {
     
     // DEBUGGING:
-    printf("Conectando a Worker en %s:%s...\n", worker->IP, worker->Port);
+    //printf("Conectando a Worker en %s:%s...\n", worker->IP, worker->Port);
 
     
     // Crear socket de conexión con Worker
@@ -207,6 +265,18 @@ int connect_with_worker(WorkerFleck* worker) {
     return 1;
 }
 
+/***********************************************
+*
+* @Finalitat: Enviar al Worker la trama inicial de distorsió, incloent user, file, MD5, factor.
+* @Parametres:
+*   in: worker       = descriptor i info del worker.
+*   in: distortInfo  = informació de la distorsió.
+*   in: fileSize     = cadena amb size del fitxer.
+*   in: fileMD5SUM   = MD5 sum del fitxer.
+*   in: init_notContinue = 1 per start, 0 per resume.
+* @Retorn: 1 en èxit, -1 en error.
+*
+************************************************/
 int send_start_distort(WorkerFleck* worker, DistortInfo* distortInfo, char* fileSize, char* fileMD5SUM, int init_notContinue) {
     
     // Preparar y enviar la trama inicial de distorsión para Worker
@@ -258,7 +328,14 @@ int send_start_distort(WorkerFleck* worker, DistortInfo* distortInfo, char* file
     return 1;
 }
 
-// Espera a recibir mensaje de confirmación de que se ha recibido el archivo correctamente y respondemos con ACK
+/***********************************************
+*
+* @Finalitat: Esperar confirmació de recepció de fitxer per part del Worker i enviar ACK.
+* @Parametres:
+*   in: worker = descriptor del socket del Worker.
+* @Retorn: 1 en èxit, -1 en error.
+*
+************************************************/
 int wait_confirm_file_received(WorkerFleck* worker) {
     
     // Leer la respuesta final de distorsión 
@@ -306,6 +383,17 @@ int wait_confirm_file_received(WorkerFleck* worker) {
     return 1;
 }
 
+
+/***********************************************
+*
+* @Finalitat: Rebre la trama inicial de distorsió del Worker (conté filesize&md5sum) i enviar ACK inicial.
+* @Parametres:
+*   in:  socket_connection = socket del Worker.
+*   out: fileSize    = punter a cadena amb filesize.
+*   out: md5sum      = punter a cadena amb md5sum.
+* @Retorn: 1 en èxit, 0 si Worker tanca, -1 en error.
+*
+************************************************/
 int receive_start_distort(int socket_connection, char** fileSize, char** md5sum) {
     unsigned char response[BUFFER_SIZE];
     
@@ -361,6 +449,18 @@ int receive_start_distort(int socket_connection, char** fileSize, char** md5sum)
     return 1; 
 }
 
+/***********************************************
+*
+* @Finalitat: Gestionar la caiguda d’un Worker durant transmissió, sol·licitar-ne un de nou a Gotham,
+*             reconnectar i continuar la distorsió.
+* @Parametres:
+*   in/out: distortInfo = informació de la distorsió.
+*   in/out: worker     = punter a WorkerFleck* actual.
+*   in/out: fileSize   = punter a cadena filesize.
+*   in/out: fileMD5SUM = punter a cadena md5sum.
+* @Retorn: 1 si es recupera, -1 si no hi ha workers disponibles.
+*
+************************************************/
 int handle_caida_worker(DistortInfo* distortInfo, WorkerFleck** worker, char** fileSize, char** fileMD5SUM) {
     // ---- CAIDA de Worker en RX----
     printF("Cierre de conexión de Worker, buscando nuevo Worker disponible...\n");
@@ -404,7 +504,14 @@ int handle_caida_worker(DistortInfo* distortInfo, WorkerFleck** worker, char** f
     }
 }
 
-// Enviar confirmación de que el archivo se recibió correctamente con MD5SUM correcto
+/***********************************************
+*
+* @Finalitat: Enviar confirmació final de MD5 correcte al Worker i esperar la confirmació de recepció.
+* @Parametres:
+*   in: socket_connection = socket del Worker.
+* @Retorn: 0 si tot va bé, -1 en error.
+*
+************************************************/
 int send_confirm_file_received (int socket_connection) {
     // Enviar confirmación de que el archivo se recibió correctamente cxon MD5SUM correcto
     unsigned char *success_trama = crear_trama(TYPE_END_DISTORT_FLECK_WORKER, (unsigned char*)CHECK_OK, strlen(CHECK_OK));
@@ -447,6 +554,15 @@ int send_confirm_file_received (int socket_connection) {
 }
 
 // Función para manejar la solicitud de distorsión
+/***********************************************
+*
+* @Finalitat: Hilo principal per gestionar tot el flux de distorsió: connexió, envoi, recepció,
+*             recuperació de caigudes i tancament.
+* @Parametres:
+*   in: arg = punter a DistortInfo inicialitzat.
+* @Retorn: NULL al finalitzar.
+*
+************************************************/
 void* handle_distort_worker(void* arg) {
     DistortInfo* distortInfo = (DistortInfo*)arg; // Puntero a Worker* para igualarlo a NULL al final
     WorkerFleck* worker = *distortInfo->worker_ptr;
@@ -765,5 +881,3 @@ void* handle_distort_worker(void* arg) {
     freeDistortInfo(distortInfo);
     return NULL;
 }
-
-

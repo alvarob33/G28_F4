@@ -1,11 +1,16 @@
 
 #include "files.h"
 
-
-
-
-
 // Devuelve string del tamaño del archivo indicado
+/***********************************************
+*
+* @Finalitat: Obtenir el tamany d’un fitxer i retornar-lo com a cadena de text.
+* @Parametres:
+*   in: filename = ruta del fitxer del qual calcular el tamany.
+* @Retorn: Punter a una cadena acabada en ‘\0’ que conté el tamany en bytes,
+*   o NULL en cas d’error (no s’ha pogut obrir o llegir el fitxer).
+*
+************************************************/
 char* get_string_file_size(const char* filename) {
     int fd = open(filename, O_RDONLY);
     if (fd == -1) {
@@ -34,7 +39,14 @@ char* get_string_file_size(const char* filename) {
 }
 
 
-
+/***********************************************
+*
+* @Finalitat: Calcular la suma MD5 d’un fitxer invocant l’eina externa `md5sum`.
+* @Parametres:
+*   in: filename = ruta del fitxer del qual calcular la suma MD5.
+* @Retorn: Punter a una cadena de 33 bytes (32 hex + ‘\0’) amb la suma MD5, o NULL en cas d’error en qualsevol pas.
+*
+************************************************/
 char* calculate_md5sum(const char* filename) {
     if (filename == NULL) {
         fprintf(stderr, "El nombre del archivo no puede ser NULL.\n");

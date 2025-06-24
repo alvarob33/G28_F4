@@ -8,7 +8,14 @@ Enigma_HarleyConfig* config = NULL;
 int gotham_sock_fd = -1;
 Server* server_flecks = NULL;
 
-// Funcion administra cierre de proceso correctamente
+/***********************************************
+*
+* @Finalitat: Gestionar la senyal SIGINT per tancar correctament el worker Enigma: desconnectar
+*             de Gotham, tancar servidor i sortir.
+* @Parametres: ---
+* @Retorn: ----
+*
+************************************************/
 void handle_sigint(/*int sig*/) {
 
     printF("\nCerrando programa de manera segura...\n");

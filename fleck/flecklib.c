@@ -1,10 +1,15 @@
-
-
 #include "flecklib.h"
 #include "flecklib_distort.h"
 
-
-// Función para leer el archivo de configuración de Fleck
+/***********************************************
+*
+* @Finalitat: Llegir i parsejar el fitxer de configuració de Fleck, extraient usuari, directori i
+*             dades de connexió a Gotham.
+* @Parametres:
+*   in: config_file = ruta al fitxer de configuració.
+* @Retorn: Punter a FleckConfig amb camps omplerts, o NULL en cas d’error.
+*
+************************************************/
 FleckConfig* FLECK_read_config(const char *config_file) {
     int fd = open(config_file, O_RDONLY);
     if (fd < 0) {
@@ -70,11 +75,27 @@ FleckConfig* FLECK_read_config(const char *config_file) {
     return config; // Devolver la configuración
 }
 
+/***********************************************
+*
+* @Finalitat: Gestionar senyal de sortida (SIGINT) imprimint missatge i sortint del procés.
+* @Parametres: ---
+* @Retorn: ---
+*
+************************************************/
 void FLECK_signal_handler() {
     printF("\nSaliendo del programa...\n");
     exit(0);
 }
 
+/***********************************************
+*
+* @Finalitat: Establir connexió TCP amb Gotham mitjançant la configuració, enviar trama de CONNECT, 
+*               i tornar el descriptor de socket.
+* @Parametres:
+*   in: config = punter a FleckConfig amb IP i port.
+* @Retorn: Descriptor de socket en èxit, -1 en error.
+*
+************************************************/
 int FLECK_connect_to_gotham(FleckConfig *config) {
     printF("Iniciando conexión de Fleck con Gotham...\n");
 
@@ -188,6 +209,15 @@ int FLECK_connect_to_gotham(FleckConfig *config) {
 
 }
 
+/***********************************************
+*
+* @Finalitat: Mostrar per pantalla l’estat de distorsió dels workers de tipus Text i Media.
+* @Parametres:
+*   in: worker_text  = punter a WorkerFleck de text (o NULL).
+*   in: worker_media = punter a WorkerFleck de media (o NULL).
+* @Retorn: ---
+*
+************************************************/
 void mostrar_estado_workers(WorkerFleck* worker_text, WorkerFleck* worker_media) {
     char *estado_text = NULL;
     char *estado_media = NULL;
@@ -218,7 +248,15 @@ void mostrar_estado_workers(WorkerFleck* worker_text, WorkerFleck* worker_media)
     printF("\n=====================================\n\n");
 }
 
-// Función para manejar el menú de opciones
+/***********************************************
+*
+* @Finalitat: Processar el menú interactiu de Fleck, acceptant i executant comandes: connect,
+*             list, distort, check status, clear, logout.
+* @Parametres:
+*   in: config = punter a FleckConfig amb dades de sessió.
+* @Retorn: ---
+*
+************************************************/
 void FLECK_handle_menu(FleckConfig *config) {
     char input[64];     // Establecemos que el máximo de caracteres que se pueden introducir por terminal son 64
     char* buffer = NULL;

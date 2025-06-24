@@ -9,7 +9,16 @@
 #include "connections.h"
 
 
-// Crea y configura el servidor
+/***********************************************
+*
+* @Finalitat: Crear i configurar un servidor TCP en l’adreça i port indicats, preparant-lo per acceptar connexions.
+* @Parametres:
+*   in:  ip_addr         = cadena amb l’adreça IP on escoltar.
+*   in:  port            = port en format host.
+*   in:  max_connections = nombre màxim de connexions en cua.
+* @Retorn: Punter a una estructura Server inicialitzada, o interromp l’execució en cas d’error greu.
+*
+************************************************/
 Server* create_server(char* ip_addr, int port, int max_connections) {
     Server* server = (Server*)malloc(sizeof(Server)); 
     if (server == NULL) {
@@ -50,7 +59,14 @@ Server* create_server(char* ip_addr, int port, int max_connections) {
     return server;
 }
 
-// Inicia el servidor y lo pone en escucha
+/***********************************************
+*
+* @Finalitat: Posar el servidor en mode “escolta” per començar a acceptar connexions entrats.
+* @Parametres:
+*   in: server = punter al servidor previament creat.
+* @Retorn: --- (aborta l’execució si no pot escoltar)
+*
+************************************************/
 void start_server(Server *server) {
     char* buffer;
 
@@ -71,7 +87,14 @@ void start_server(Server *server) {
     free(buffer);
 }
 
-// Cierra el servidor
+/***********************************************
+*
+* @Finalitat: Tancar el socket del servidor i alliberar recursos associats.
+* @Parametres:
+*   in: server = punter al servidor a tancar.
+* @Retorn: ---
+*
+************************************************/
 void close_server(Server *server) {
     if (server == NULL) return;
 
@@ -81,7 +104,14 @@ void close_server(Server *server) {
     printF("Servidor cerrado.\n");
 }
 
-// Función para establecer conexión con un cliente
+/***********************************************
+*
+* @Finalitat: Acceptar una nova connexió de client sobre el servidor especificat.
+* @Parametres:
+*   in: server = punter al servidor que escolta.
+* @Retorn: Descriptor del socket del client acceptat, o -1 en cas d’error.
+*
+************************************************/
 int accept_connection(Server *server) {
     socklen_t addrlen = sizeof(server->address);
     if (server == NULL) {
@@ -99,6 +129,16 @@ int accept_connection(Server *server) {
 }
 
 // POST: se debe hacer free() de la trama devuelta
+/***********************************************
+*
+* @Finalitat: Crear una trama de mida fixa (BUFFER_SIZE) amb tipus, llargada de dades, dades, checksum i timestamp.
+* @Parametres:
+*   in: TYPE        = byte de tipus de la trama.
+*   in: data        = punter a les dades a enviar.
+*   in: data_length = longitud de les dades (<=247).
+* @Retorn: Punter a un buffer de `unsigned char` de mida BUFFER_SIZE, o NULL en cas d’error.
+*
+************************************************/
 unsigned char* crear_trama(int TYPE, unsigned char* data, size_t data_length) {
     // Preparar la trama para enviar
     // [1B] TYPE, [2B] DATA_LENGTH, [247B] DATA, [2B] CHECKSUM, [4B] TIMESTAMP
@@ -144,6 +184,15 @@ unsigned char* crear_trama(int TYPE, unsigned char* data, size_t data_length) {
     return trama;
 }
 
+/***********************************************
+*
+* @Finalitat: Analitzar una trama rebuda, validar checksum, extreure tipus, timestamp i dades.
+* @Parametres:
+*   in: trama = buffer de mida BUFFER_SIZE amb la trama.
+* @Retorn: Punter a TramaResult amb camps omplerts, o NULL si checksum incorrecte o error.
+*
+************************************************/
+// POST: se debe hacer free_tramaResult().
 TramaResult* leer_trama(unsigned char *trama) {
     if (trama == NULL) return NULL;
     
@@ -209,17 +258,14 @@ TramaResult* leer_trama(unsigned char *trama) {
     return result;
 }
 
-
-// Función para liberar un TramaResult
-/*
-void free_tramaResult(TramaResult *result) {
-    if (result == NULL) return; // No hacer nada si es NULL
-
-    if (result->data) free(result->data);               // Liberar la memoria de data
-    if (result->timestamp) free(result->timestamp);     // Liberar la memoria de timestamp
-    free(result);                                       // Liberar la memoria del struct
-}
-*/
+/***********************************************
+*
+* @Finalitat: Alliberar memòria associada a un TramaResult (només 'data', la timestamp és estàtica).
+* @Parametres:
+*   in: result = punter a TramaResult a alliberar.
+* @Retorn: --- (allibera result->data i la pròpia estructura).
+*
+************************************************/
 void free_tramaResult(TramaResult *result) {
     if (result == NULL) return;
 
@@ -237,6 +283,14 @@ void free_tramaResult(TramaResult *result) {
 }
 
 
+/***********************************************
+*
+* @Finalitat: Enviar heartbeats periòdics per mantenir viva la connexió amb un client.
+* @Parametres:
+*   in: socket_fd = descriptor del socket del client.
+* @Retorn: Retorna quan el client tanca o hi ha error.
+*
+************************************************/
 void enviar_heartbeat_constantemente(int socket_fd) {
     
     unsigned char buffer[BUFFER_SIZE];
@@ -286,6 +340,14 @@ void enviar_heartbeat_constantemente(int socket_fd) {
     
 }
 
+/***********************************************
+*
+* @Finalitat: Responder automàticament a heartbeats rebuts des del servidor.
+* @Parametres:
+*   in: arg = punter a integer amb el socket_fd.
+* @Retorn: Retorna quan el servidor tanca o hi ha error.
+*
+************************************************/
 void* responder_heartbeat_constantemente(void *arg) {
     int socket_fd = *(int *)arg;  // Obtener el socket_fd desde el argumento
     unsigned char buffer[BUFFER_SIZE];
@@ -325,93 +387,3 @@ void* responder_heartbeat_constantemente(void *arg) {
 
     return NULL;
 }
-
-/* NUEVA
-unsigned char* crear_trama(int TYPE, char* data) {
-    unsigned char *trama = (unsigned char *)malloc(BUFFER_SIZE);
-    if (trama == NULL) {
-        printF("Error en malloc para trama\n");
-        return NULL;
-    }
-
-    memset(trama, 0, BUFFER_SIZE); // Inicializar a ceros
-    trama[0] = TYPE;              // Tipo de trama
-    int data_length = data ? strlen(data) : 0; 
-    trama[1] = (data_length >> 8) & 0xFF;  // Longitud alta
-    trama[2] = data_length & 0xFF;         // Longitud baja
-
-    if (data) {
-        strncpy((char *)&trama[3], data, data_length); // Copiar los datos
-    }
-
-    // Calcular checksum
-    unsigned short checksum = 0;
-    for (int i = 0; i < 3 + data_length; i++) {
-        checksum += trama[i];
-    }
-    trama[250] = (checksum >> 8) & 0xFF; // Checksum alto
-    trama[251] = checksum & 0xFF;        // Checksum bajo
-
-    // Timestamp
-    time_t timestamp = time(NULL);
-    trama[252] = (timestamp >> 24) & 0xFF;
-    trama[253] = (timestamp >> 16) & 0xFF;
-    trama[254] = (timestamp >> 8) & 0xFF;
-    trama[255] = timestamp & 0xFF;
-
-    return trama;
-}
-
-*/
-
-/* ALVARO
-TramaResult* leer_trama(unsigned char *trama) {
-    // Validar el checksum
-    unsigned short checksum_calculado = 0;
-    for (int i = 0; i < 250; i++) {
-        checksum_calculado += (unsigned char)trama[i]; // Sumar cada byte
-    }
-    unsigned short checksum_enviado = (trama[250] << 8) | trama[251]; // Reconstruir el checksum 
-
-    if (checksum_calculado != checksum_enviado) {
-        printF("Error: Checksum inválido.\n");
-        return NULL;
-    }
-
-    // Crear la estructura de resultado
-    TramaResult* result = (TramaResult *)malloc(sizeof(TramaResult));
-    if (result == NULL) {
-        printF("Error: No se pudo asignar memoria para la estructura TramaResult.\n");
-        return NULL;
-    }
-
-    // Obtener el timestamp y guardarlo en TramaResult
-    time_t timestamp = (trama[252] << 24) | (trama[253] << 16) | (trama[254] << 8) | trama[255];
-    result->timestamp = ctime(&timestamp);
-    if (result->timestamp == NULL) {
-        printF("Error: No se pudo convertir el timestamp.\n");
-        return NULL;
-    }
-    printF("Timestamp recibido: ");
-    printF(result->timestamp);
-
-    // Leer el campo data_length 
-    int data_length = (trama[1] << 8) | trama[2]; // Reconstruir la longitud de los datos
-    if (data_length > 247 || data_length <= 0) {
-        printF("Error: Longitud de datos inválida.\n");
-        return NULL;
-    }
-
-    // Reservar memoria dinámica para los datos, incluyendo el terminador nulo
-    result->data = (char *)malloc(data_length + 1); // +1 para el terminador nulo
-    if (result->data == NULL) {
-        printf("Error: No se pudo asignar memoria para los datos.\n");
-        return NULL;
-    }
-    strncpy(result->data, &trama[3], data_length); // Copiar los datos desde trama[3]
-
-    return result;
-}
-
-*/
-
