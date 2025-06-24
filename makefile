@@ -13,7 +13,7 @@ SOURCES = config/config.c config/connections.c\
           gotham/gotham.c gotham/gothamlib.c \
           fleck/fleck.c fleck/flecklib.c fleck/flecklib_distort.c \
           worker/worker.c worker/harley/harley.c worker/enigma/enigma.c \
-          worker/harley/harleylib.c worker/enigma/enigmalib.c worker/worker_distort.c\
+          worker/enigma/enigmalib.c worker/worker_distort.c\
 		  arkham/arkham.c
 
 # Convertimos los archivos fuente a archivos objeto (Únicamente utilizado para el clean)
