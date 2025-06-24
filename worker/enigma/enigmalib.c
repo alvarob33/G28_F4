@@ -22,12 +22,6 @@ int distort_file_text(const char* input_path, char* output_path, int distort_fac
         return -1;
     }
 
-    // Crear nombre del archivo de salida
-    if (asprintf(&output_path, "%s_distorted", input_path) < 0) {
-        write(STDERR_FILENO, "Filename generation failed\n", 26);
-        return -1;
-    }
-
     // Abrir archivos
     int src_fd = open(input_path, O_RDONLY);
     if (src_fd == -1) {

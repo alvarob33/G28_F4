@@ -1,6 +1,7 @@
 CC = gcc
 CFLAGS = -c
 LDFLAGS = -pthread -Wall -Wextra
+LDLIBS = -lm
 
 # Definimos las rutas de las carpetas
 SRC_DIRS = gotham fleck worker worker/harley worker/enigma
@@ -31,11 +32,11 @@ gotham.exe: config/config.o config/connections.o config/files.o gotham/gothamlib
 fleck.exe: config/config.o config/connections.o config/files.o fleck/flecklib_distort.o fleck/flecklib.o fleck/fleck.o
 	$(CC) $(INCLUDES) $^ -o $@ $(LDFLAGS)
 
-enigma.exe: config/config.o config/connections.o config/files.o worker/enigma/enigmalib.o worker/worker_distort.o worker/worker.o worker/enigma/enigma.o
-	$(CC) $(INCLUDES) $^ -o $@ $(LDFLAGS)
+enigma.exe: config/config.o config/connections.o config/files.o worker/enigma/enigmalib.o worker/harley/so_compression.o worker/worker_distort.o worker/worker.o worker/enigma/enigma.o
+	$(CC) $(INCLUDES) $^ -o $@ $(LDFLAGS) $(LDLIBS)
 
-harley.exe: config/config.o config/connections.o config/files.o worker/enigma/enigmalib.o worker/harley/harleylib.o worker/worker_distort.o worker/worker.o worker/harley/harley.o
-	$(CC) $(INCLUDES) $^ -o $@ $(LDFLAGS)
+harley.exe: config/config.o config/connections.o config/files.o worker/enigma/enigmalib.o worker/harley/so_compression.o worker/worker_distort.o worker/worker.o worker/harley/harley.o
+	$(CC) $(INCLUDES) $^ -o $@ $(LDFLAGS) $(LDLIBS)
 
 clean:
 	rm -f $(OBJECTS) $(EXECUTABLES)

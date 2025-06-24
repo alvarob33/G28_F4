@@ -3,8 +3,10 @@
 
 #include <stdio.h>
 #include <pthread.h>
+
 #include "../config/connections.h"
 #include "../config/config.h"
+#include "worker_distort.h"
 
 typedef struct {
     char *ip_gotham;     // Dirección IP para Gotham (dinámico)
@@ -15,10 +17,11 @@ typedef struct {
     char *worker_type;   // Tipo de worker ("Media" o "Text") (dinámico)
 } Enigma_HarleyConfig;
 
+
 Enigma_HarleyConfig* WORKER_read_config(const char *config_file);
 void WORKER_print_config(Enigma_HarleyConfig* config);
 
-void WORKER_cancel_and_wait_threads(pthread_t* subthreads, int num_subthreads);
+void WORKER_cancel_and_wait_threads(ClientThread* threads, int num_threads);
 
 int WORKER_connect_to_gotham(Enigma_HarleyConfig *config, int* isPrincipalWorker);
 void* responder_gotham(void *arg);

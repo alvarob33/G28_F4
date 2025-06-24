@@ -8,52 +8,10 @@
 #include "config.h"
 
 // Definimos la lista de extensiones como una variable global
-const char* const MEDIA_EXTENSIONS[] = {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".wav", NULL}; //.wav es audio
+const char* const MEDIA_EXTENSIONS[] = {".png", ".jpg", ".jpeg", ".wav", ".mp3", NULL}; //.wav es audio
 const char* const TEXT_EXTENSIONS[] = {".txt", ".md", ".log", ".csv", NULL};
 
 // // Función para leer una línea hasta el carácter indicado
-// char* read_until(int fd, char end) {
-//     int i = 0, size;
-//     char c = '\0';
-//     char *string = (char *)malloc(sizeof(char)); // Inicialmente una cadena de un solo carácter
-
-//     if (string == NULL) {
-//         perror("Error en malloc");
-//         return NULL;
-//     }
-
-//     while (1) {
-//         size = read(fd, &c, sizeof(char));  // Leemos un carácter del archivo
-
-//         if (size == -1) {
-//             perror("Error al leer el archivo");
-//             free(string);
-//             return NULL; // Error en la lectura
-//         } else if (size == 0) { // EOF
-//             if (i == 0) {
-//                 free(string); // Liberar la memoria
-//                 return NULL;  // Indicar EOF
-//             }
-//             break;
-//         }
-
-//         if (c != end) {
-//             char* tmp = (char *)realloc(string, sizeof(char) * (i + 2)); // Añadir espacio para un nuevo carácter
-//             if (tmp == NULL) {
-//                 perror("Error en realloc");
-//                 free(string); // Liberar la memoria original en caso de fallo
-//                 return NULL;
-//             }
-//             string = tmp;
-//             string[i++] = c; // Guardamos el carácter
-//         } else {
-//             break; // Terminamos si encontramos el delimitador
-//         }
-//     }
-
-//     string[i] = '\0'; // Finalizamos la cadena
-//     return string;    // Devolvemos la cadena leída
-// }
 
 char* read_until(int fd, char end) {
     int i = 0, size;
@@ -179,9 +137,8 @@ char* file_type(const char* filename) {
 
     // Buscar la última ocurrencia de '.' en el nombre del archivo
     const char* extension = strrchr(filename, '.');
-    if (!extension) {
-        return NULL; // No tiene extensión
-    }
+    if (!extension) return NULL; // No tiene extensión
+
     // Comprobar si es una extensión de media
     for (int i = 0; MEDIA_EXTENSIONS[i] != NULL; i++) {  // Revisar hasta el NULL
         if (strcmp(extension, MEDIA_EXTENSIONS[i]) == 0) {
@@ -196,6 +153,29 @@ char* file_type(const char* filename) {
     }
 
     // No coincide con ninguna extensión conocida
+    return NULL;
+}
+
+char* wich_media(const char *filename) {
+    const char *image_ext[] = { ".jpg", ".jpeg", ".png", NULL};
+    const char *audio_ext[] = { ".mp3", ".wav", NULL};
+
+    // Obtener puntero a la última ocurrencia de '.'
+    const char *dot = strrchr(filename, '.');
+    if (!dot || dot == filename) return NULL;  // No tiene extensión
+
+    char ext[16];
+    strncpy(ext, dot, sizeof(ext));
+    ext[sizeof(ext) - 1] = '\0';
+    to_lowercase(ext); // Convertimos la extensión a minúsculas
+
+    for (int i = 0; image_ext[i] != NULL; i++) {
+        if (strcmp(ext, image_ext[i]) == 0) return IMAGE;
+    }
+    for (int i = 0; audio_ext[i] != NULL; i++) {
+        if (strcmp(ext, audio_ext[i]) == 0) return AUDIO;
+    }
+
     return NULL;
 }
 
