@@ -13,13 +13,17 @@
 /* Variables globales */ 
 GlobalInfoGotham* globalInfo = NULL;
 
-// Funcion administra cierre de proceso padre
+/***********************************************
+*
+* @Finalitat: Gestionar la senyal SIGINT tancant de forma segura el procés Gotham: atura Arkham, tanca servidors, allibera
+*             memòria i termina fils.
+* @Parametres: ---
+* @Retorn: ----
+*
+************************************************/
 void handle_sigint(/*int sig*/) {
 
     printF("\n\nCerrando programa de manera segura...\n");
-    
-    // ARKHAM
-    // log_event(globalInfo, "Cerrando programa con SIGINT)");
 
     // Cerrar pipe para que Arkham termine
     close(globalInfo->log_fd);
@@ -80,7 +84,14 @@ void handle_sigint(/*int sig*/) {
     raise(SIGINT);
 }
 
-// Funcion para crear Servidor de Workers y administrar las conexiones entrantes
+/***********************************************
+*
+* @Finalitat: Crear i posar en escolta el servidor de Workers, acceptar connexions entrants
+*             i llançar un thread per a cada Worker.
+* @Parametres: ---
+* @Retorn: Apunta a NULL (thread func).
+*
+************************************************/
 void* workers_server(/*void* arg*/) {
 
     // Crear y configurar servidor
@@ -135,7 +146,14 @@ void* workers_server(/*void* arg*/) {
     return NULL;
 }
 
-// Funcion para crear Servidor de Flecks y administrar las conexiones entrantes
+/***********************************************
+*
+* @Finalitat: Crear i posar en escolta el servidor de Flecks, acceptar connexions entrants
+*             i llançar un thread per a cada Fleck.
+* @Parametres: ---
+* @Retorn: Apunta a NULL (thread func).
+*
+************************************************/
 void* fleck_server(/*void* arg*/) {
 
     // Crear y configurar servidor
@@ -211,12 +229,14 @@ void* fleck_server(/*void* arg*/) {
     return NULL;
 }
 
-
-/**
- * Crea el proceso Arkham y establece la comunicación por pipe
- * @param globalInfo Estructura con la información global del sistema
- * @return 0 en éxito, -1 en error
- */
+/***********************************************
+*
+* @Finalitat: Crear el procés Arkham i establir comunicació via pipe per registrar logs.
+* @Parametres:
+*   in: globalInfo = punter a l’estat global de Gotham.
+* @Retorn: 0 en èxit, -1 en cas d’error.
+*
+************************************************/
 int create_arkham_process(GlobalInfoGotham* globalInfo) {
     int pipefd[2];
     

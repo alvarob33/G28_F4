@@ -7,11 +7,15 @@
 #include "../worker/worker.h"
 #include "gothamlib.h"
 
-
-
 // ARCHIVO CONFIGURACIÓN
 
-// Función para leer el archivo de configuración
+/***********************************************
+*
+* @Finalitat: Llegir i parsejar el fitxer de configuració de Gotham.
+* @Paràmetres: in: config_file = ruta al fitxer de configuració.
+* @Retorn: Punter a GothamConfig amb la configuració carregada o NULL en cas d’error.
+*
+************************************************/
 GothamConfig* GOTHAM_read_config(const char *config_file) {
     char* buffer;
 
@@ -76,6 +80,13 @@ GothamConfig* GOTHAM_read_config(const char *config_file) {
     return config; // Devolver la configuración
 }
 
+/***********************************************
+*
+* @Finalitat: Mostrar per pantalla la configuració llegida de Gotham.
+* @Paràmetres: in: config = punter a GothamConfig amb els valors a mostrar.
+* @Retorn: ----
+*
+************************************************/
 void GOTHAM_show_config(GothamConfig* config) {
     // Mostrar la configuración leída
     char* buffer;
@@ -96,7 +107,13 @@ void GOTHAM_show_config(GothamConfig* config) {
 
 // LIBERAR MEMORIA
 
-// Se libera la memoria dinámica de un Worker y se cierra las conexión de este
+/***********************************************
+*
+* @Finalitat: Alliberar la memòria d’un Worker i tancar el seu socket.
+* @Paràmetres: in: worker = còpia de l’estructura Worker a alliberar.
+* @Retorn: ----
+*
+************************************************/
 void liberar_memoria_worker(Worker worker) {
 
     free(worker.workerType);
@@ -109,7 +126,13 @@ void liberar_memoria_worker(Worker worker) {
 
 }
 
-// Se libera la memoria de los structs worker
+/***********************************************
+*
+* @Finalitat: Alliberar la memòria de tots els Workers registrats a Gotham.
+* @Paràmetres: in: globalInfo = punter a l’estat global de Gotham.
+* @Retorn: ----
+*
+************************************************/
 void liberar_memoria_workers(GlobalInfoGotham* globalInfo) {
     if (globalInfo->workers == NULL) {
         // printF("No hay Workers conectados\n");
@@ -123,6 +146,13 @@ void liberar_memoria_workers(GlobalInfoGotham* globalInfo) {
     free(globalInfo->workers); 
 }
 
+/***********************************************
+*
+* @Finalitat: Tancar sockets i alliberar l’array de connexions de Flecks.
+* @Paràmetres: in: globalInfo = punter a l’estat global de Gotham.
+* @Retorn: ----
+*
+************************************************/
 void liberar_memoria_flecks(GlobalInfoGotham* globalInfo) {
     if (globalInfo->fleck_sockets == NULL) {
         // printF("No hay Flecks conectados\n");
@@ -138,6 +168,14 @@ void liberar_memoria_flecks(GlobalInfoGotham* globalInfo) {
     free(globalInfo->fleck_sockets);  // Liberar el array de sockets de Flecks
 }
 
+/***********************************************
+*
+* @Finalitat: Cancel·lar tots els threads actius i esperar la seva finalització,
+*             incloent-hi els threads de servidor de Workers i Flecks.
+* @Paràmetres: in: globalInfo = punter a l’estat global de Gotham.
+* @Retorn: ----
+*
+************************************************/
 void cancel_and_wait_threads(GlobalInfoGotham* globalInfo) {
 
     // Cerrar y liberar subthreads
@@ -164,6 +202,16 @@ void cancel_and_wait_threads(GlobalInfoGotham* globalInfo) {
     pthread_join(globalInfo->workers_server_thread, NULL);
 }
 
+/***********************************************
+*
+* @Finalitat: Gestionar la connexió d’un Fleck entrant:
+*             - Llegir trames del socket
+*             - Processar els comandaments CONNECT i DISTORT
+*             - Enviar respostes adequades a Fleck
+* @Paràmetres: in: void_args = punter a ThreadArgsGotham amb socket i info global.
+* @Retorn: NULL en finalitzar la connexió.
+*
+************************************************/
 void* handle_fleck_connection(void* void_args) {
     ThreadArgsGotham* args = (ThreadArgsGotham *)void_args;
     GlobalInfoGotham* globalInfo = args->global_info;
@@ -247,11 +295,6 @@ void* handle_fleck_connection(void* void_args) {
                 free(response);
                 printF("Sin Workers disponibles. Respuesta de DISTORT_KO enviada a Fleck.\n");
 
-                // char* buffer;
-                // asprintf(&buffer, " %s %d %d ", mediaType, harley_pworker_index, num_workers);
-                // printF(buffer);
-                // free(buffer);
-
                 continue;
             }
 
@@ -315,108 +358,14 @@ void* handle_fleck_connection(void* void_args) {
     return NULL;
 }
 
-
-
-
-/* HACE BIEN EL CHECKSUM PERO SE CIERRA EL SERVIDOR INMEDIATAMENTE
-void* handle_fleck_connection(void* client_socket) {
-    int socket_fd = *(int*)client_socket;
-    unsigned char buffer[BUFFER_SIZE];
-    int bytes_read;
-
-    while ((bytes_read = recv(socket_fd, buffer, sizeof(buffer), 0)) > 0) {
-        TramaResult *result = leer_trama(buffer);
-        if (result == NULL || result->data == NULL) {
-            printF("Trama inválida recibida de Fleck.\n");
-            if (result) free_tramaResult(result);
-            continue;
-        }
-
-        printf("Trama recibida: TYPE=0x%02x, DATA=%s\n", buffer[0], &buffer[3]);
-
-
-        // Validar el TYPE de la trama
-        if (buffer[0] != 0x01) {  // Si el TYPE no es 0x01
-            printF("Tipo de trama inválido recibido de Fleck.\n");
-            free_tramaResult(result);
-            continue;
-        }
-
-        // Comando CONNECT
-        printF("Comando CONNECT recibido de Fleck.\n");
-
-        // Hacer una copia de los datos para trabajar con strtok
-        char *data_copy = strdup(result->data);
-        if (data_copy == NULL) {
-            perror("Error al duplicar los datos de la trama");
-            free_tramaResult(result);
-            continue;
-        }
-
-        // Parsear los datos: <username>&<IP>&<Port>
-        char *username = strtok(data_copy, "&");
-        char *ip = strtok(NULL, "&");
-        char *port = strtok(NULL, "&");
-
-        if (username && ip && port) {
-            // Procesar datos válidos
-            printf("Usuario conectado: %s, IP: %s, Puerto: %s\n", username, ip, port);
-
-            // Responder con OK
-            unsigned char *response = crear_trama(0x01, "");  // DATA vacío
-            if (send(socket_fd, response, BUFFER_SIZE, 0) < 0) {
-                perror("Error enviando respuesta OK a Fleck");
-            } else {
-                printF("Respuesta de OK enviada a Fleck.\n");
-            }
-            free(response);
-
-            // Cerrar el socket después de procesar correctamente
-            close(socket_fd);
-            printF("Socket cerrado tras procesar trama CONNECT.\n");
-
-            // Liberar recursos
-            free(data_copy);
-            free_tramaResult(result);
-
-        } else {
-            // Manejar datos inválidos
-            unsigned char *response = crear_trama(0x01, "CON_KO");
-            if (send(socket_fd, response, BUFFER_SIZE, 0) < 0) {
-                perror("Error enviando respuesta CON_KO a Fleck");
-            } else {
-                printF("Formato de conexión inválido. Respuesta CON_KO enviada.\n");
-            }
-            free(response);
-
-            // Liberar recursos
-            free(data_copy);
-            free_tramaResult(result);
-
-            // Cerrar el socket después de un error en los datos
-            close(socket_fd);
-            printF("Socket cerrado tras recibir datos inválidos.\n");
-
-            return NULL;  // Terminar la conexión
-        }
-
-        // Si el bucle termina normalmente por `bytes_read == 0`
-        if (bytes_read == 0) {
-            printF("Fleck desconectado.\n");
-        } else if (bytes_read < 0) {
-            // Manejar error en recv
-            perror("Error al recibir datos de Fleck");
-        }
-
-        // Cerrar socket si no se cerró previamente
-        close(socket_fd);
-        printF("Socket cerrado tras terminar el procesamiento.\n");
-
-        return NULL;
-    }
-}
-*/
-
+/***********************************************
+*
+* @Finalitat: Cercar l’índex d’un Worker donat el seu descriptor de socket.
+* @Paràmetres: in: globalInfo = punter a l’estat global de Gotham.
+*             in: socket_fd = descriptor de socket del Worker.
+* @Retorn: Índex a l’array de workers o -1 si no es troba.
+*
+************************************************/
 int find_worker_bySocket(GlobalInfoGotham* globalInfo, int socket_fd) {
     for (int i = 0; i < globalInfo->num_workers; i++) {
         if (globalInfo->workers[i].socket_fd == socket_fd) {
@@ -426,6 +375,17 @@ int find_worker_bySocket(GlobalInfoGotham* globalInfo, int socket_fd) {
     return -1; // No se encontró el Worker
 }
 
+/***********************************************
+*
+* @Finalitat: Emmagatzemar un nou Worker a la llista global:
+*             - Reassignar memòria
+*             - Parsejar les dades de la trama rebuda
+*             - Actualitzar comptadors i notificar l’esdeveniment
+* @Paràmetres: in: globalInfo = punter a l’estat global de Gotham.
+*             in: result = TramaResult amb les dades del Worker.
+* @Retorn: 1 si té èxit, 0 en cas d’error.
+*
+************************************************/
 int store_new_worker(GlobalInfoGotham* globalInfo, TramaResult* result) {
     
     // Comprobar que no se supere número máximo de Workers
@@ -481,6 +441,17 @@ int store_new_worker(GlobalInfoGotham* globalInfo, TramaResult* result) {
     return 1;
 }
 
+/***********************************************
+*
+* @Finalitat: Eliminar un Worker de la llista global:
+*             - Tancar el seu socket i alliberar memòria
+*             - Reajustar l’array i reassignar memòria
+*             - Assignar un nou principal si cal
+* @Paràmetres: in: globalInfo = punter a l’estat global de Gotham.
+*             in: socket_fd = descriptor de socket del Worker a eliminar.
+* @Retorn: ----
+*
+************************************************/
 void remove_worker(GlobalInfoGotham* globalInfo, int socket_fd) {
     pthread_mutex_lock(&globalInfo->worker_mutex);
 
@@ -598,7 +569,17 @@ void remove_worker(GlobalInfoGotham* globalInfo, int socket_fd) {
     pthread_mutex_unlock(&globalInfo->worker_mutex);
 }
 
-
+/***********************************************
+*
+* @Finalitat: Gestionar la connexió d’un Worker entrant:
+*             - Llegir la trama inicial de connexió
+*             - Emmagatzemar i respondre si és principal o secundari
+*             - Mantenir heartbeats fins a la desconnexió
+*             - Eliminar el Worker en acabar
+* @Paràmetres: in: void_args = punter a ThreadArgsGotham amb socket i info global.
+* @Retorn: NULL en finalitzar la connexió.
+*
+************************************************/
 void *handle_worker_connection(void *void_args) {
     ThreadArgsGotham* args = (ThreadArgsGotham *)void_args;
     GlobalInfoGotham* globalInfo = args->global_info;
@@ -689,7 +670,17 @@ void *handle_worker_connection(void *void_args) {
     return NULL;
 }
 
-
+/***********************************************
+*
+* @Finalitat: Registrar un esdeveniment de sistema a Arkham:
+*             - Formatejar missatge amb printf-like
+*             - Empaquetar en una trama TYPE_LOG
+*             - Escriure la trama completa al pipe d’Arkham
+* @Paràmetres: in: g   = punter a l’estat global de Gotham.
+*             in: fmt = cadena de format amb arguments variables.
+* @Retorn: ----
+*
+************************************************/
 void log_event(GlobalInfoGotham *g, const char *fmt, ...) {
     char msg[256];
     va_list ap;
