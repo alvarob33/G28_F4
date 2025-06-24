@@ -311,6 +311,10 @@ int receive_start_distort(int socket_connection, char** fileSize, char** md5sum)
     
     int bytes_received = recv(socket_connection, response, BUFFER_SIZE, 0);
     if (bytes_received <= 0) {
+        if (bytes_received == 0) {
+            // CAIDA de Worker durante distorsión
+            return 0;
+        }
         perror("Error al recibir solicitud inicial");
         close(socket_connection);
         return -1;
@@ -355,6 +359,49 @@ int receive_start_distort(int socket_connection, char** fileSize, char** md5sum)
     free(ack_trama);
 
     return 1; 
+}
+
+int handle_caida_worker(DistortInfo* distortInfo, WorkerFleck** worker, char** fileSize, char** fileMD5SUM) {
+    // ---- CAIDA de Worker en RX----
+    printF("Cierre de conexión de Worker, buscando nuevo Worker disponible...\n");
+
+    sleep(8); // Esperar un segundo para que gotham tenga tiempo de asignar un nuevo Worker
+
+    freeWorkerFleck(distortInfo->worker_ptr);
+    // Enviar petición de distort a Gotham y guardar informacion del Worker asignado por Gotham en distortInfo
+    if (request_distort_gotham(distortInfo->socket_gotham, (*worker)->workerType, distortInfo->worker_ptr, distortInfo) > 0) {
+
+        // Cerramos la conexión antigua
+        close((*worker)->socket_fd);
+        *worker = *distortInfo->worker_ptr; // Actualizar el worker con el nuevo Worker asignado por Gotham
+        
+        // Intentamos reconectar con el nuevo worker
+        if (connect_with_worker(*worker) < 1) {
+            perror("Error al reconectar con nuevo Worker");
+            return -1;
+        }
+
+        // Volvemos a enviar el start_distort
+        if (send_start_distort(*worker, distortInfo, *fileSize, *fileMD5SUM, 0) < 1) {
+            perror("Error al reenviar solicitud de distorsión");
+            return -1;
+        }
+
+        // Volvemos a recibir la trama inicial de distorsión
+        if (receive_start_distort((*worker)->socket_fd, fileSize, fileMD5SUM) < 1) {
+            perror("Error al recibir trama inicial de distorsión de vuelta");
+            return -1;
+        }
+
+        printF("Success: Nuevo Worker encontrado.\n");
+
+        return 1;
+
+    } else {
+        // No hay Workers disponibles
+        perror("Error: Distorsión cancelada (No hay Workers disponibles).");
+        return -1;
+    }
 }
 
 // Enviar confirmación de que el archivo se recibió correctamente con MD5SUM correcto
@@ -497,6 +544,7 @@ void* handle_distort_worker(void* arg) {
         if (bytes_received <= 0) {
 
             // ---- CAIDA de Worker en TX ----
+            
             printF("Cierre de conexión de Worker, buscando nuevo Worker disponible...\n");
 
             sleep(8); // Esperar un segundo para que gotham tenga tiempo de asignar un nuevo Worker
@@ -557,7 +605,7 @@ void* handle_distort_worker(void* arg) {
         // printF(itoa(worker->status));
 
         // DEBUGGING: Bajar velocidad de envío
-        sleep(0.1);
+        // usleep(100000);
     }
 
     // ---- Comprobar si se envió todo el archivo correctamente mediante MD5SUM----
@@ -576,10 +624,20 @@ void* handle_distort_worker(void* arg) {
     // Recibir trama inicial envio archivo distorsionado
     free(fileSize);
     free(fileMD5SUM);
-    if (receive_start_distort(worker->socket_fd, &fileSize, &fileMD5SUM) < 1) {
+    int result_func = receive_start_distort(worker->socket_fd, &fileSize, &fileMD5SUM);
+    if (result_func < 0) {
         perror("Error al recibir trama inicial de distorsión");
         freeDistortInfo(distortInfo);
         return NULL;
+
+    } else if (result_func == 0) {
+        
+        // CAIDA de Worker mientras distorsionaba
+        if (handle_caida_worker(distortInfo, &worker, &fileSize, &fileMD5SUM) < 1) {
+            perror("Error al manejar la caída del Worker");
+            freeDistortInfo(distortInfo);
+            return NULL;
+        }
     }
 
     char* distorted_file_path = NULL;
@@ -604,56 +662,15 @@ void* handle_distort_worker(void* arg) {
         if (bytes_received <= 0) {
 
             // ---- CAIDA de Worker en RX----
-            printF("Cierre de conexión de Worker, buscando nuevo Worker disponible...\n");
-
-            sleep(8); // Esperar un segundo para que gotham tenga tiempo de asignar un nuevo Worker
-
-            freeWorkerFleck(distortInfo->worker_ptr);
-            // Enviar petición de distort a Gotham y guardar informacion del Worker asignado por Gotham en distortInfo
-            if (request_distort_gotham(distortInfo->socket_gotham, worker->workerType, distortInfo->worker_ptr, distortInfo) > 0) {
-
-                // Cerramos la conexión antigua
-                close(worker->socket_fd);
-                worker = *distortInfo->worker_ptr; // Actualizar el worker con el nuevo Worker asignado por Gotham
-                
-                // Intentamos reconectar con el nuevo worker
-                if (connect_with_worker(worker) < 1) {
-                    perror("Error al reconectar con nuevo Worker");
-                    close(fd);
-                    freeDistortInfo(distortInfo);
-                    return NULL;
-                }
-
-                // Volvemos a enviar el start_distort
-                if (send_start_distort(worker, distortInfo, fileSize, fileMD5SUM, 0) < 1) {
-                    perror("Error al reenviar solicitud de distorsión");
-                    close(fd);
-                    freeDistortInfo(distortInfo);
-                    return NULL;
-                }
-
-                // Volvemos a recibir la trama inicial de distorsión
-                if (receive_start_distort(worker->socket_fd, &fileSize, &fileMD5SUM) < 1) {
-                    perror("Error al recibir trama inicial de distorsión de vuelta");
-                    close(fd);
-                    freeDistortInfo(distortInfo);
-                    return NULL;
-                }
-
-                // Retrocede el puntero del archivo para volver a escribir el mismo fragmento
-                // lseek(fd, -bytes_received, SEEK_CUR);
-
-                printF("Success: Nuevo Worker encontrado.\n");
-
-                continue;
-
-            } else {
-                // No hay Workers disponibles
-                perror("Error: Distorsión cancelada (No hay Workers disponibles).");
+            if (handle_caida_worker(distortInfo, &worker, &fileSize, &fileMD5SUM) < 1) {
+                perror("Error al manejar la caída del Worker");
                 close(fd);
                 freeDistortInfo(distortInfo);
+
                 return NULL;
             }
+
+            continue; 
         }
 
         result = leer_trama(response);

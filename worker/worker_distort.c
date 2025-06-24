@@ -6,7 +6,7 @@
 
 // Estructura para memoria compartida
 typedef struct {
-    int transfer_flag;  // 0=recibiendo, 1=enviando
+    int transfer_flag;  // 0=recibiendo, 1=enviando, 2=enviando
     long total_bytes_received;
 } SharedData;
 
@@ -445,6 +445,7 @@ void* handle_fleck_connection(void* arg) {
         free(calculated_md5);
 
         close(fd_file);
+        shared->transfer_flag = 1;
 
         printF("Archivo de Fleck recibido correctamente.\n");
 
@@ -455,6 +456,13 @@ void* handle_fleck_connection(void* arg) {
             return NULL;
         }
 
+    } else {
+        free(md5sum);
+        free_tramaResult(result);
+    }
+
+
+    if (shared->transfer_flag == 1) {
 
         // 3. Distorsionar archivo
 
@@ -500,7 +508,7 @@ void* handle_fleck_connection(void* arg) {
             free(filepath);
         } 
 
-        shared->transfer_flag = 1;  // Cambiar flag a enviando
+        shared->transfer_flag = 2;  // Cambiar flag a enviando
         shared->total_bytes_received = 0;  // Reiniciar contador de bytes recibidos
 
 
@@ -513,9 +521,7 @@ void* handle_fleck_connection(void* arg) {
 
 
     } else {
-        free(md5sum);
-        free_tramaResult(result);
-        
+
         if (strcmp(fileType, MEDIA) == 0) {
             distorted_file_path = filepath;
         } else {
