@@ -11,6 +11,17 @@ typedef struct {
 } SharedData;
 
 
+/***********************************************
+*
+* @Finalitat: Enviar al client Fleck la trama inicial de retorn de fitxer distorsionat amb
+*             tamany i checksum, i validar la seva resposta.
+* @Parametres:
+*   in: socket_fd    = descriptor del socket amb Fleck.
+*   in: fileSize     = cadena amb el nombre de bytes del fitxer.
+*   in: fileMD5SUM   = cadena amb el MD5 sum del fitxer.
+* @Retorn: 1 en èxit, -1 en cas d’error.
+*
+************************************************/
 int start_send_back_distort(int socket_fd, char* fileSize, char* fileMD5SUM) {
     
     // Preparar y enviar la trama inicial de archivo distorsionado para Fleck
@@ -62,12 +73,19 @@ int start_send_back_distort(int socket_fd, char* fileSize, char* fileMD5SUM) {
     return 1;
 } 
 
-
-
-
+/***********************************************
+*
+* @Finalitat: Crear o obrir un segment de memòria  compartida per sincronitzar l’enviament/
+*             recepció de fitxers.
+* @Parametres:
+*   in/out: shared    = punter a SharedData* result.
+*   out:    fd_shared = descriptor de memòria compartida.
+*   in:     filename  = identificador base per al segment.
+*   in:     type      = 0: crear, 1: obrir.
+* @Retorn: 0 en èxit, -1 en cas d’error.
+*
+************************************************/
 int crear_abrir_mem_compartida(SharedData **shared, int* fd_shared, char* filename, int type) {
-
-    
     char* shared_id = NULL;
     asprintf(&shared_id, "/%s", filename);  // ID debe empezar con '/' y no puede contener más '/'
     
@@ -122,7 +140,14 @@ int crear_abrir_mem_compartida(SharedData **shared, int* fd_shared, char* filena
     return 0;
 }
 
-// Enviar confirmación de que el archivo se recibió correctamente con MD5SUM correcto
+/***********************************************
+*
+* @Finalitat: Enviar confirmació de recepció de fitxer distorsionat i esperar OK de Fleck.
+* @Parametres:
+*   in: socket_connection = socket de Fleck.
+* @Retorn: 0 en èxit, -1 en cas d’error.
+*
+************************************************/
 int send_confirm_file_received (int socket_connection) {
     // Enviar confirmación de que el archivo se recibió correctamente cxon MD5SUM correcto
     unsigned char *success_trama = crear_trama(TYPE_END_DISTORT_FLECK_WORKER, (unsigned char*)CHECK_OK, strlen(CHECK_OK));
@@ -164,7 +189,14 @@ int send_confirm_file_received (int socket_connection) {
     return 0;
 }
 
-// Espera a recibir mensaje de confirmación de que se ha recibido el archivo correctamente y respondemos con ACK
+/***********************************************
+*
+* @Finalitat: Esperar confirmació final de Fleck sobre la recepció del fitxer i respondre amb ACK.
+* @Parametres:
+*   in: socket_connection = socket de Fleck.
+* @Retorn: 1 en èxit, -1 en cas d’error.
+*
+************************************************/
 int wait_confirm_file_received(int socket_connection) {
     
     // Leer la respuesta final de distorsión 
@@ -203,7 +235,7 @@ int wait_confirm_file_received(int socket_connection) {
         free(success_trama);
     
         
-    } else /*if (bytes_received == 0)*/ {
+    } else {
         // Conexión cerrada por Worker
         return -1;
     }
@@ -211,8 +243,15 @@ int wait_confirm_file_received(int socket_connection) {
     return 1;
 }
 
-
-// Función para manejar la distorsion del cliente
+/***********************************************
+*
+* @Finalitat: Controlar tot el flux de distorsió pel client Fleck: rebre, emmagatzemar,
+*             distorsionar i reenviar.
+* @Parametres:
+*   in: arg = punter a ClientThread amb socket i estat.
+* @Retorn: NULL al final o en error.
+*
+************************************************/
 void* handle_fleck_connection(void* arg) {
     ClientThread* client = (ClientThread*)arg;
 
@@ -671,14 +710,3 @@ void* handle_fleck_connection(void* arg) {
     return NULL;
 
 }
-
-
-
-
-
-
-
-
-
-
-

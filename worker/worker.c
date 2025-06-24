@@ -6,9 +6,16 @@
 
 #include "worker.h"
 
-
-
-// Función para leer el archivo de configuración de Enigma/Harley
+/***********************************************
+*
+* @Finalitat: Llegir i parsejar el fitxer de configuració per a un Worker (Enigma o Harley), obtenint
+*             IP i port de Gotham, IP i port del Fleck,
+*             directori de treball i tipus de Worker.
+* @Parametres:
+*   in: config_file = ruta al fitxer de configuració.
+* @Retorn: Punter a Enigma_HarleyConfig amb els camps omplerts, o NULL en cas d’error.
+*
+************************************************/
 Enigma_HarleyConfig* WORKER_read_config(const char *config_file) {
     int fd = open(config_file, O_RDONLY);
     if (fd < 0) {
@@ -102,6 +109,14 @@ Enigma_HarleyConfig* WORKER_read_config(const char *config_file) {
     return config; // Devolver la configuración leída
 }
 
+/***********************************************
+*
+* @Finalitat: Imprimir per consola els paràmetres de configuració llegits.
+* @Parametres:
+*   in: config = punter a Enigma_HarleyConfig.
+* @Retorn: ---
+*
+************************************************/
 void WORKER_print_config(Enigma_HarleyConfig* config) {
     char* buffer;
 
@@ -135,13 +150,21 @@ void WORKER_print_config(Enigma_HarleyConfig* config) {
 
 // LIBERAR MEMORIA 
 
-// Cerrar y liberar subthreads de Flecks
+/***********************************************
+*
+* @Finalitat: Tancar i alliberar subthreads de Flecks
+* @Parametres:
+*   in/out: threads     = array de ClientThread.
+*   in:     num_threads = nombre de fils actius.
+* @Retorn: --- (allibera tot i posa num_threads a 0).
+*
+************************************************/
 void WORKER_cancel_and_wait_threads(ClientThread* threads, int num_threads) {
     for (int i = 0; i < num_threads; i++) {
         if (threads[i].active) {
             threads[i].active = 0; // Indica al hilo que debe terminar
             
-            // Opcional: enviar señal al socket para desbloquear accept/read
+            // enviar señal al socket para desbloquear accept/read
             shutdown(threads[i].socket, SHUT_RDWR);
             
             // Esperamos a que el thread se cierre de forma segura
@@ -155,24 +178,16 @@ void WORKER_cancel_and_wait_threads(ClientThread* threads, int num_threads) {
     num_threads = 0;
 }
 
-
-/**
- * @brief Conecta un Worker (Enigma o Harley) al sistema Gotham.
- * 
- * Esta función establece una conexión TCP/IP con el servidor Gotham utilizando un socket,
- * enviando información sobre el Worker (tipoWorker, IP y puerto). Luego, espera y verifica
- * la respuesta del servidor para confirmar si la conexión fue exitosa.
- * 
- * - Si la conexión es exitosa, se devuelve el descriptor del socket abierto para continuar
- *   con la comunicación.
- * - Si ocurre algún error, se libera la memoria dinámica utilizada
- *   y se devuelve -1 para indicar fallo.
- * 
- * @param config Puntero a una estructura de configuración (Enigma_HarleyConfig) que contiene
- *               los parámetros necesarios para realizar la conexión (tipo de worker, IP y puerto de Gotham).
- * 
- * @return int El descriptor del socket si la conexión es exitosa, o -1 si ocurre algún error durante el proceso.
- */
+/***********************************************
+*
+* @Finalitat: Establir connexió TCP amb el servidor Gotham, enviar la trama de connect i
+*             determinar si el Worker és principal.
+* @Parametres:
+*   in: config            = punter a Enigma_HarleyConfig.
+*   out: isPrincipalWorker = marca a 1 si se l’assigna principal.
+* @Retorn: Descriptor de socket en èxit, -1 en error.
+*
+************************************************/
 int WORKER_connect_to_gotham(Enigma_HarleyConfig *config, int* isPrincipalWorker) {
     //char* buffer;
 
@@ -281,9 +296,14 @@ int WORKER_connect_to_gotham(Enigma_HarleyConfig *config, int* isPrincipalWorker
     return sock_fd;
 }
 
-/*  Funcion para mantenernos respondiendo mensajes de gotham. Estos mensajes pueden ser HEARTBEAT o indicarnos
-    que se nos ha asignado como workers principales.
-*/
+/***********************************************
+*
+* @Finalitat: Hilo que respon a trames de Gotham: HEARTBEAT amb OK i detecta assignació com a worker principal.
+* @Parametres:
+*   in: arg = punter a descriptor de socket.
+* @Retorn: NULL al finalitzar (p.e. al rebre TYPE_PRINCIPAL_WORKER).
+*
+************************************************/
 void* responder_gotham(void *arg) {
     int socket_fd = *(int *)arg;  // Obtener el socket_fd desde el argumento
     unsigned char buffer[BUFFER_SIZE];
@@ -345,6 +365,15 @@ void* responder_gotham(void *arg) {
     return NULL;
 }
 
+/***********************************************
+*
+* @Finalitat: Enviar a Gotham la trama de desconexió i tancar el socket de comunicació.
+* @Parametres:
+*   in: sock_fd = descriptor del socket.
+*   in: config  = punter a Enigma_HarleyConfig (tipus de Worker).
+* @Retorn: 0 en èxit, -1 en error.
+*
+************************************************/
 int WORKER_disconnect_from_gotham(int sock_fd, Enigma_HarleyConfig *config) {
 
     // Preparar la trama para enviar el mensaje de desconexión

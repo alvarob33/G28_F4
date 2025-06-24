@@ -8,13 +8,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * Distorsiona un archivo de tipo TEXT eliminando palabras con longitud menor a distort_factor
- * @param input_path  Ruta del archivo original
- * @param output_path  Ruta del archivo distorsionado (se generará un nombre basado en input_path)
- * @param distort_factor  Longitud mínima de palabras a conservar (>=1)
- * @return 0 en éxito, -1 en error
- */
+
+/***********************************************
+*
+* @Finalitat: Distorsionar un fitxer de text eliminant les paraules amb longitud menor a 'distort_factor'
+*             i escriure el resultat a un fitxer de sortida.
+* @Parametres:
+*   in: input_path    = ruta al fitxer original.
+*   in: output_path   = ruta on es crearà el fitxer distorsionat (es generará un nom basat en input_path).
+*   in: distort_factor = longitud mínima de paraula a conservar (>=1).
+* @Retorn: 0 en èxit, -1 en cas d’error.
+*
+************************************************/
 int distort_file_text(const char* input_path, char* output_path, int distort_factor) {
     // Validación de parámetros
     if (!input_path || distort_factor < 1) {
