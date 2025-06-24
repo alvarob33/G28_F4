@@ -34,6 +34,8 @@
 #define TYPE_PRINCIPAL_WORKER 0x08              // Asignación de un nuevo Worker principal
 #define TYPE_ERROR 0x09                         // Error recibiendo la trama
 #define TYPE_HEARTBEAT 0x12                     // Conexiones HEARTBEAT
+#define TYPE_LOG 0x20
+
 
 // Estructura para guardar información de un servidor
 typedef struct {

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <stdarg.h>
 
 #include "../worker/worker.h"
 #include "gothamlib.h"
@@ -671,4 +672,16 @@ void *handle_worker_connection(void *void_args) {
 }
 
 
+void log_event(GlobalInfoGotham *g, const char *fmt, ...) {
+    char msg[256];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
 
+    unsigned char *frame = crear_trama(TYPE_LOG, (unsigned char*)msg, strlen(msg));
+    if (!frame) return;
+    // Siempre escribimos BUFFER_SIZE bytes para que Arkham lea tramas completas
+    write(g->log_fd, frame, BUFFER_SIZE);
+    free(frame);
+}

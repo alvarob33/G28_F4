@@ -57,7 +57,9 @@ typedef struct {
     int num_subthreads;
     pthread_mutex_t subthreads_mutex;
 
-    
+    // Logs
+    int log_fd;                // FD del pipe hacia Arkham
+
 } GlobalInfoGotham;
 
 typedef struct {
@@ -75,6 +77,8 @@ void cancel_and_wait_threads(GlobalInfoGotham* globalInfo);
 
 void* handle_fleck_connection(void* client_socket);
 void* handle_worker_connection(void* client_socket);
+
+void log_event(GlobalInfoGotham *g, const char *fmt, ...);
 
 
 #endif

@@ -17,6 +17,7 @@ GlobalInfoGotham* globalInfo = NULL;
 void handle_sigint(/*int sig*/) {
 
     printF("\n\nCerrando programa de manera segura...\n");
+    log_event(globalInfo, "Shutdown received (SIGINT)");
 
     // CONFIG
     free(globalInfo->config->ip_fleck);
@@ -218,6 +219,31 @@ int main(int argc, char *argv[]) {
         perror("Error al leer la configuración.\n");
         return -1;
     }
+
+     // Crear pipe para comunicación con Arkham
+    int pipefd[2];
+    if (pipe(pipefd) < 0) {
+        perror("Error creando pipe para Arkham");
+        exit(EXIT_FAILURE);
+    }
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("Error al forkar Arkham");
+        exit(EXIT_FAILURE);
+    }
+    if (pid == 0) {
+        // Proceso Arkham
+        close(pipefd[1]);  // cerramos escritura
+        // Reemplazar stdin por el extremo de lectura (fd = pipefd[0])
+        dup2(pipefd[0], STDIN_FILENO);
+        close(pipefd[0]);
+        execl("./arkham.exe", "arkham.exe", NULL);
+        perror("Error al ejecutar Arkham");
+        exit(EXIT_FAILURE);
+    }
+    // Padre (Gotham)
+    close(pipefd[0]);      // cerramos lectura
+    globalInfo->log_fd = pipefd[1];
 
     // Mostrar configuración
     GOTHAM_show_config(globalInfo->config);
