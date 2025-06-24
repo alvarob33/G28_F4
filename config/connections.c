@@ -186,15 +186,15 @@ TramaResult* leer_trama(unsigned char *trama) {
         return NULL;
     }
 
-    // Reservar memoria dinámica para los datos, incluyendo el terminador nulo
+    // Copiar los datos
     result->data = (char *)malloc(result->data_length + 1); // +1 para el terminador nulo
     if (result->data == NULL) {
         printF("Error: No se pudo asignar memoria para los datos.\n");
         free(result);
         return NULL;
     }
-    strncpy(result->data, (char *)&trama[3], result->data_length); // Copiar los datos desde trama[3]
-    result->data[result->data_length] = '\0';
+    memcpy(result->data, &trama[3], result->data_length);
+    result->data[result->data_length] = '\0'; // Asegurar que los datos están terminados en nulo
 
     // Obtener el timestamp y guardarlo en TramaResult
     time_t timestamp = (trama[252] << 24) | (trama[253] << 16) | (trama[254] << 8) | trama[255];

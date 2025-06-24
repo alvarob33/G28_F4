@@ -188,6 +188,35 @@ int FLECK_connect_to_gotham(FleckConfig *config) {
 
 }
 
+void mostrar_estado_workers(WorkerFleck* worker_text, WorkerFleck* worker_media) {
+    char *estado_text = NULL;
+    char *estado_media = NULL;
+    
+    printF("\n========= ESTADO DE WORKERS =========\n\n");
+    
+    // Formatear estado worker texto
+    if (worker_text == NULL) {
+        asprintf(&estado_text, "Worker de Texto: No tiene distorsión activa\n");
+    } else {
+        asprintf(&estado_text, "Worker de Texto [%s:%s]: %d%% completado\n", 
+                worker_text->IP, worker_text->Port, worker_text->status);
+    }
+
+    printF(estado_text);
+    free(estado_text); 
+    
+    // Formatear estado worker media
+    if (worker_media == NULL) {
+        asprintf(&estado_media, "Worker de Media:  No tiene distorsión activa\n");
+    } else {
+        asprintf(&estado_media, "Worker de Media  [%s:%s]: %d%% completado\n", 
+                worker_media->IP, worker_media->Port, worker_media->status);
+    }
+    printF(estado_media);
+    free(estado_media); 
+    
+    printF("\n=====================================\n\n");
+}
 
 // Función para manejar el menú de opciones
 void FLECK_handle_menu(FleckConfig *config) {
@@ -358,6 +387,7 @@ void FLECK_handle_menu(FleckConfig *config) {
                 char *extra = strtok(NULL, " \t\n");
                 if (extra == NULL) {
                     printF("Command OK\n");
+                    mostrar_estado_workers(worker_text, worker_media);
                 } else {
                     printF("Unknown command\n");
                 }

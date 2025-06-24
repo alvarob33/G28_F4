@@ -16,8 +16,10 @@
 #define printF(X) write(1, X, strlen(X))
 
 #define BUFFER_SIZE 256
-#define MEDIA "Media"
 #define TEXT "Text"
+#define MEDIA "Media"
+#define IMAGE "Image"
+#define AUDIO "Audio"
 
 // Importamos las variables de las extensiones para que sean accesibles por cualquier archivo
 extern const char *const MEDIA_EXTENSIONS[];
@@ -35,6 +37,8 @@ void list_files(const char *dir, const char *extension);
 void eliminar_caracteres(char *str);
 
 char* file_type(const char* filename);
+
+char* wich_media(const char *filename);
 
 
 #endif

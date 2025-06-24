@@ -212,14 +212,15 @@ int send_start_distort(WorkerFleck* worker, DistortInfo* distortInfo, char* file
     // Preparar y enviar la trama inicial de distorsión para Worker
     unsigned char* data;
     asprintf((char**)&data, "%s&%s&%s&%s&%s", distortInfo->username, distortInfo->filename, fileSize, fileMD5SUM, distortInfo->distortion_factor);
-    printF((char*)data);
-    printF("\n");
+    // printF((char*)data);
+    // printF("\n");
     
     unsigned char* tramaEnviar = crear_trama((init_notContinue) ? TYPE_START_DISTORT_FLECK_WORKER : TYPE_RESUME_DISTORT_FLECK_WORKER, data, strlen((char*)data));
     if (write(worker->socket_fd, tramaEnviar, BUFFER_SIZE) < 0) {
         perror("Error enviando respuesta al cliente");
         return -1;
     }
+    free(data);
     free(tramaEnviar);
 
 
@@ -244,6 +245,7 @@ int send_start_distort(WorkerFleck* worker, DistortInfo* distortInfo, char* file
 
             if (result) free_tramaResult(result);
         } else {
+            if (result) free_tramaResult(result);
             return -1;
         }
     
@@ -254,6 +256,147 @@ int send_start_distort(WorkerFleck* worker, DistortInfo* distortInfo, char* file
     }
 
     return 1;
+}
+
+// Espera a recibir mensaje de confirmación de que se ha recibido el archivo correctamente y respondemos con ACK
+int wait_confirm_file_received(WorkerFleck* worker) {
+    
+    // Leer la respuesta final de distorsión 
+    unsigned char response[BUFFER_SIZE];
+    int bytes_received = recv(worker->socket_fd, response, BUFFER_SIZE, 0);
+    
+    TramaResult *result;
+    if (bytes_received > 0) {
+        // Procesar la trama
+        result = leer_trama(response);
+        if (result == NULL) {
+            printF("Trama inválida recibida de Worker.\n");
+            if (result) free_tramaResult(result);
+            return -1;
+        }
+
+        // Comprobar si recxibimos con CHECK_OK
+        if (result->type == TYPE_END_DISTORT_FLECK_WORKER && strcmp(result->data, CHECK_OK) == 0) {
+            printF("Archivo enviado correctamente.\n");
+
+            if (result) free_tramaResult(result);
+        } else {
+            printF("Worker NO ha recibido el archivo correctamente (MD5 Invalido).\n");
+            if (result) free_tramaResult(result);
+            return -1;
+        }
+
+        // Enviar confirmación de recepción (ACK) a Worker
+        unsigned char *success_trama = crear_trama(TYPE_END_DISTORT_FLECK_WORKER, (unsigned char*)OK_MSG, strlen(OK_MSG));
+        if (write(worker->socket_fd, success_trama, BUFFER_SIZE) < 0) {
+            perror("Error enviando confirmación de MD5");
+            free(success_trama);
+
+            return -1;
+        }
+        free(success_trama);
+    
+        
+    } else /*if (bytes_received == 0)*/ {
+        // Conexión cerrada por Worker
+        printF("Error al recibir trama de Worker.\n");
+        return -1;
+    }
+
+    return 1;
+}
+
+int receive_start_distort(int socket_connection, char** fileSize, char** md5sum) {
+    unsigned char response[BUFFER_SIZE];
+    
+    int bytes_received = recv(socket_connection, response, BUFFER_SIZE, 0);
+    if (bytes_received <= 0) {
+        perror("Error al recibir solicitud inicial");
+        close(socket_connection);
+        return -1;
+    }
+
+    // Procesar la trama inicial
+    TramaResult *result = leer_trama(response);
+    if (!result || (result->type != TYPE_START_DISTORT_WORKER_FLECK)) {
+        perror("Trama inicial inválida");
+        if (result) free_tramaResult(result);
+        close(socket_connection);
+        return -1;
+    }
+
+    // Guardar md5sum y filesize    // (filesize&md5sum)
+    if (fileSize && md5sum) {
+        *fileSize = strdup(strtok(result->data, "&"));
+        *md5sum = strdup(strtok(NULL, "&"));
+
+        if (!fileSize || !md5sum) {
+            perror("Formato de datos trama distorsion inicial inválido");
+            
+            free(*fileSize);
+            free(*md5sum);
+            close(socket_connection);
+            return -1;
+        }
+    }
+    free_tramaResult(result);
+
+
+    // Enviar ACK de recepción inicial
+    unsigned char *ack_trama = crear_trama(TYPE_START_DISTORT_WORKER_FLECK, (unsigned char*)OK_MSG, strlen(OK_MSG));
+    if (write(socket_connection, ack_trama, BUFFER_SIZE) < 0) {
+        perror("Error enviando confirmación inicial");
+
+        if (fileSize) free(*fileSize);
+        if (md5sum) free(*md5sum);
+        close(socket_connection);
+        return -1;
+    }
+    free(ack_trama);
+
+    return 1; 
+}
+
+// Enviar confirmación de que el archivo se recibió correctamente con MD5SUM correcto
+int send_confirm_file_received (int socket_connection) {
+    // Enviar confirmación de que el archivo se recibió correctamente cxon MD5SUM correcto
+    unsigned char *success_trama = crear_trama(TYPE_END_DISTORT_FLECK_WORKER, (unsigned char*)CHECK_OK, strlen(CHECK_OK));
+    if (write(socket_connection, success_trama, BUFFER_SIZE) < 0) {
+        perror("Error enviando confirmación de MD5");
+        free(success_trama);
+
+        return -1;
+    }
+    free(success_trama);
+
+    // Esperar OK de Worker
+    unsigned char response[BUFFER_SIZE];
+    int bytes_received = recv(socket_connection, response, BUFFER_SIZE, 0);
+    
+    if (bytes_received > 0) {
+        // Procesar la trama
+        TramaResult *result = leer_trama(response);
+        if (result == NULL) {
+            printF("Trama inválida recibida de Worker.\n");
+            if (result) free_tramaResult(result);
+            return -1;
+        }
+
+        // Comprobar si responde con OK
+        if (result->type == TYPE_END_DISTORT_FLECK_WORKER && strcmp(result->data, "CON_KO") != 0) {
+            // printF("Worker ha recibido la confirmación.\n");
+
+            if (result) free_tramaResult(result);
+        } else {
+            return -1;
+        }
+    
+        
+    } else /*if (bytes_received == 0)*/ {
+        // Conexión cerrada por Worker
+        return -1;
+    }
+    return 0;
 }
 
 // Función para manejar la solicitud de distorsión
@@ -305,24 +448,19 @@ void* handle_distort_worker(void* arg) {
         freeDistortInfo(distortInfo);
         return NULL;
     }
-    
+
+    long file_size = atol(fileSize);  // Tamaño total del archivo en bytes
 
     // ---- Enviar archivo a Worker ----
     // Enviar el archivo al Worker mediante tramas de 256 bytes por trama
 
-    int fd;
-    if (strcmp(worker->workerType, MEDIA) == 0) {
-        fd = open(file_path, O_RDONLY);
-    } else {
-        fd = open(file_path, O_RDONLY | O_BINARY);
-    }
+    int fd = open(file_path, O_RDONLY);
     if (fd < 0) {
         perror("Error al abrir el archivo con open()");
         freeDistortInfo(distortInfo);
         return NULL;
     }
 
-    long file_size = atol(fileSize);  // Tamaño total del archivo en bytes
 
     long bytes_sent = 0;
     ssize_t bytes_read;
@@ -330,11 +468,13 @@ void* handle_distort_worker(void* arg) {
     unsigned char buffer[247]; // solo hay 247 bytes de data útil
     unsigned char response[BUFFER_SIZE];
     TramaResult *result;
+    int bytes_received;
 
     worker->status = 0;
     while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
+
         // Enviar trama con fragmento del archivo
-        printF((char*) buffer);
+        // printF((char*) buffer);
         unsigned char* trama = crear_trama(TYPE_FILE_DATA, buffer, bytes_read);
         if (trama == NULL) {
             perror("Error al crear trama de archivo");
@@ -343,7 +483,7 @@ void* handle_distort_worker(void* arg) {
             return NULL;
         }
 
-        if (write(worker->socket_fd, trama, BUFFER_SIZE) < 0) {
+        if (write(worker->socket_fd, trama, BUFFER_SIZE) != BUFFER_SIZE/*< 0*/) {
             perror("Error al enviar trama al Worker");
             free(trama);
             close(fd);
@@ -353,18 +493,20 @@ void* handle_distort_worker(void* arg) {
         free(trama);
 
         // Comprobar si Worker lo recibió correctamente
-        int bytes_received = recv(worker->socket_fd, response, BUFFER_SIZE, 0);
+        bytes_received = recv(worker->socket_fd, response, BUFFER_SIZE, 0);
         if (bytes_received <= 0) {
 
-            // ---- CAIDA de Worker ----
-            perror("Cierre de conexión de Worker, al recibir confirmación");
+            // ---- CAIDA de Worker en TX ----
+            printF("Cierre de conexión de Worker, buscando nuevo Worker disponible...\n");
+
+            sleep(8); // Esperar un segundo para que gotham tenga tiempo de asignar un nuevo Worker
 
             freeWorkerFleck(distortInfo->worker_ptr);
             // Enviar petición de distort a Gotham y guardar informacion del Worker asignado por Gotham en distortInfo
             if (request_distort_gotham(distortInfo->socket_gotham, worker->workerType, distortInfo->worker_ptr, distortInfo) > 0) {
 
                 // Cerramos la conexión antigua
-                close(worker->socket_fd);
+                close(worker->socket_fd);   // No necesario
                 worker = *distortInfo->worker_ptr; // Actualizar el worker con el nuevo Worker asignado por Gotham
                 
                 // Intentamos reconectar con el nuevo worker
@@ -382,6 +524,8 @@ void* handle_distort_worker(void* arg) {
                     freeDistortInfo(distortInfo);
                     return NULL;
                 }
+
+                printF("Success: Nuevo Worker encontrado.\n");
 
                 // Retrocede el puntero del archivo para volver a leer y enviar el mismo fragmento (ya que no se envió por la caida)
                 lseek(fd, -bytes_read, SEEK_CUR);
@@ -409,22 +553,198 @@ void* handle_distort_worker(void* arg) {
         free_tramaResult(result);
 
         bytes_sent += bytes_read;
-        worker->status = (int)((bytes_sent * 100) / file_size*2);   // Por 2 porque se debe enviar y recibir
+        worker->status = (int)((bytes_sent * 100) / (file_size*2));   // Por 2 porque se debe enviar y recibir
         // printF(itoa(worker->status));
 
         // DEBUGGING: Bajar velocidad de envío
-        sleep(5);
+        sleep(0.1);
     }
-    printF("Archivo enviado.\n");
 
-    // Recepción del archivo distorsionado
+    // ---- Comprobar si se envió todo el archivo correctamente mediante MD5SUM----
+    close(fd);
+
+    if (wait_confirm_file_received(worker) < 1) {
+        perror("Error al esperar confirmación de archivo recibido por Worker");
+        freeDistortInfo(distortInfo);
+        return NULL;
+    }
+
+    bytes_sent = 0;
+    
+    // ---- Recepción del archivo distorsionado ----
+
+    // Recibir trama inicial envio archivo distorsionado
+    free(fileSize);
+    free(fileMD5SUM);
+    if (receive_start_distort(worker->socket_fd, &fileSize, &fileMD5SUM) < 1) {
+        perror("Error al recibir trama inicial de distorsión");
+        freeDistortInfo(distortInfo);
+        return NULL;
+    }
+
+    char* distorted_file_path = NULL;
+    asprintf(&distorted_file_path, "users%s/%s_distorted", distortInfo->user_dir, distortInfo->filename);
+
+    printF("Recibiendo archivo distorsionado...\n");
+    
+    // Recibir el archivo distorsionado en fragmentos
+    int fd_distorted = open(distorted_file_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd_distorted < 0) {
+        perror("Error al crear archivo distorsionado");
+        free(distorted_file_path);
+        freeDistortInfo(distortInfo);
+        return NULL;
+    }
+    
+    long total_bytes_received = 0;
+    long distorted_filesize = atol(fileSize);
+    
+    while (total_bytes_received < distorted_filesize) {
+        bytes_received = recv(worker->socket_fd, response, BUFFER_SIZE, 0);
+        if (bytes_received <= 0) {
+
+            // ---- CAIDA de Worker en RX----
+            printF("Cierre de conexión de Worker, buscando nuevo Worker disponible...\n");
+
+            sleep(8); // Esperar un segundo para que gotham tenga tiempo de asignar un nuevo Worker
+
+            freeWorkerFleck(distortInfo->worker_ptr);
+            // Enviar petición de distort a Gotham y guardar informacion del Worker asignado por Gotham en distortInfo
+            if (request_distort_gotham(distortInfo->socket_gotham, worker->workerType, distortInfo->worker_ptr, distortInfo) > 0) {
+
+                // Cerramos la conexión antigua
+                close(worker->socket_fd);
+                worker = *distortInfo->worker_ptr; // Actualizar el worker con el nuevo Worker asignado por Gotham
+                
+                // Intentamos reconectar con el nuevo worker
+                if (connect_with_worker(worker) < 1) {
+                    perror("Error al reconectar con nuevo Worker");
+                    close(fd);
+                    freeDistortInfo(distortInfo);
+                    return NULL;
+                }
+
+                // Volvemos a enviar el start_distort
+                if (send_start_distort(worker, distortInfo, fileSize, fileMD5SUM, 0) < 1) {
+                    perror("Error al reenviar solicitud de distorsión");
+                    close(fd);
+                    freeDistortInfo(distortInfo);
+                    return NULL;
+                }
+
+                // Volvemos a recibir la trama inicial de distorsión
+                if (receive_start_distort(worker->socket_fd, &fileSize, &fileMD5SUM) < 1) {
+                    perror("Error al recibir trama inicial de distorsión de vuelta");
+                    close(fd);
+                    freeDistortInfo(distortInfo);
+                    return NULL;
+                }
+
+                // Retrocede el puntero del archivo para volver a escribir el mismo fragmento
+                // lseek(fd, -bytes_received, SEEK_CUR);
+
+                printF("Success: Nuevo Worker encontrado.\n");
+
+                continue;
+
+            } else {
+                // No hay Workers disponibles
+                perror("Error: Distorsión cancelada (No hay Workers disponibles).");
+                close(fd);
+                freeDistortInfo(distortInfo);
+                return NULL;
+            }
+        }
+
+        result = leer_trama(response);
+        if (!result || result->type != TYPE_FILE_DATA) {
+            perror("Trama de datos distorsionados inválida");
+            // printF(result->data);
+            if (result) free_tramaResult(result);
+            close(fd_distorted);
+            free(distorted_file_path);
+            freeDistortInfo(distortInfo);
+            return NULL;
+        }
+
+        ssize_t bytes_written = write(fd_distorted, result->data, result->data_length);
+        if (bytes_written != (ssize_t)result->data_length) {
+            perror("Error escribiendo archivo distorsionado");
+            free_tramaResult(result);
+            close(fd_distorted);
+            free(distorted_file_path);
+            freeDistortInfo(distortInfo);
+            return NULL;
+        }
+        free_tramaResult(result);
+
+        // Enviar confirmación de recepción
+        unsigned char* ack_trama = crear_trama(TYPE_FILE_DATA, (unsigned char*)OK_MSG, strlen(OK_MSG));
+        if (write(worker->socket_fd, ack_trama, BUFFER_SIZE) < 0) {
+            perror("Error enviando confirmación de recepción");
+            free(ack_trama);
+            close(fd_distorted);
+            free(distorted_file_path);
+            freeDistortInfo(distortInfo);
+            return NULL;
+        }
+        free(ack_trama);
+
+        total_bytes_received += bytes_written;
+        worker->status = 50 + (int)((total_bytes_received)*50 / distorted_filesize); // 50-100%
+
+        // DEBUGGING: Bajar velocidad de recepción
+        usleep(100000);
+    }
+
+    close(fd_distorted);
+
+
+    // ---- Comprobar MD5 del archivo recibido ----
+
+    char *calculated_md5 = calculate_md5sum(distorted_file_path);
+    if (calculated_md5 == NULL) {
+        perror("Error calculando MD5 del archivo recibido");
+    }
+
+    // Enviar trama al cliente en base al resultado del MD5
+    if (!calculated_md5 || strcmp(calculated_md5, fileMD5SUM) != 0) {
+        unsigned char *error_trama = crear_trama(TYPE_END_DISTORT_FLECK_WORKER, (unsigned char*)CHECK_KO, strlen(CHECK_KO));
+        if (write(worker->socket_fd, error_trama, BUFFER_SIZE) < 0) {
+            perror("Error enviando mensaje de MD5 no coincidente");
+        } else {
+            printF("Enviado: MD5 del archivo recibido no coincide con el esperado\n");
+        }
+        free(error_trama);
+
+        free(fileMD5SUM);
+        if (calculated_md5) free(calculated_md5);
+        free(distorted_file_path);
+        free(fileSize);
+        freeDistortInfo(distortInfo);
+        return NULL;
+    }
+
+    free(fileMD5SUM);
+    free(calculated_md5);
+    free(distorted_file_path);
+    free(fileSize);
+
+    if (send_confirm_file_received(worker->socket_fd) != 0) {
+        perror("Error enviando confirmación de recepción del archivo con MD5SUM correcto");
+        freeDistortInfo(distortInfo);
+        return NULL;
+    }
+
+
+    // ---- Final ----
 
     // Se finalizó la distorsión del archivo
     worker->status = 100;  // Suponemos que el trabajo se completó con éxito
 
     // Cerrar la conexión
     close(worker->socket_fd);
-    printf("Conexión cerrada con el Worker %s:%s\n$ ", worker->IP, worker->Port);
+    printF("Success: Archivo distorsionado correctamente y conexión cerrada con Worker\n$ ");
     freeDistortInfo(distortInfo);
     return NULL;
 }
