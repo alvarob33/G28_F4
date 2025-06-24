@@ -15,3 +15,12 @@
 [Tue Jun 24 22:11:51 2025] Comando DISTORT recibido de Fleck.
 [Tue Jun 24 22:11:51 2025] Respuesta con Worker Harley pricipal enviado a Fleck.
 [Tue Jun 24 22:13:01 2025] No hay Workers de tipo 'Text' para asignar como Principal Worker.
+[Tue Jun 24 22:26:18 2025] Sistema Gotham iniciado
+[Tue Jun 24 22:26:18 2025] Servidor para Flecks iniciado.
+[Tue Jun 24 22:26:18 2025] Servidor para Workers iniciado
+[Tue Jun 24 22:26:30 2025] New worker added: workerType=Media, IP=172.16.214.18, Port=9182
+
+[Tue Jun 24 22:26:33 2025] Fleck conectado: Arthur, IP: 172.16.214.21, Puerto: 9183
+
+[Tue Jun 24 22:26:44 2025] Comando DISTORT recibido de Fleck.
+[Tue Jun 24 22:26:44 2025] Respuesta con Worker Harley pricipal enviado a Fleck.
