@@ -1,0 +1,17 @@
+[Tue Jun 24 21:36:53 2025] Sistema Gotham iniciado
+[Tue Jun 24 21:42:24 2025] Sistema Gotham iniciado
+[Tue Jun 24 21:44:57 2025] Sistema Gotham iniciado
+[Tue Jun 24 21:47:39 2025] Sistema Gotham iniciado
+[Tue Jun 24 21:47:39 2025] Continue
+[Tue Jun 24 22:10:45 2025] Sistema Gotham iniciado
+[Tue Jun 24 22:10:45 2025] Servidor para Flecks iniciado.
+[Tue Jun 24 22:10:45 2025] Servidor para Workers iniciado
+[Tue Jun 24 22:11:09 2025] Fleck conectado: Arthur, IP: 172.16.214.21, Puerto: 9183
+
+[Tue Jun 24 22:11:16 2025] New worker added: workerType=Media, IP=172.16.214.18, Port=9182
+
+[Tue Jun 24 22:11:31 2025] Comando DISTORT recibido de Fleck.
+[Tue Jun 24 22:11:31 2025] Respuesta con Worker Harley pricipal enviado a Fleck.
+[Tue Jun 24 22:11:51 2025] Comando DISTORT recibido de Fleck.
+[Tue Jun 24 22:11:51 2025] Respuesta con Worker Harley pricipal enviado a Fleck.
+[Tue Jun 24 22:13:01 2025] No hay Workers de tipo 'Text' para asignar como Principal Worker.

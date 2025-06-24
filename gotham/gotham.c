@@ -17,7 +17,19 @@ GlobalInfoGotham* globalInfo = NULL;
 void handle_sigint(/*int sig*/) {
 
     printF("\n\nCerrando programa de manera segura...\n");
-    log_event(globalInfo, "Shutdown received (SIGINT)");
+    
+    // ARKHAM
+    // log_event(globalInfo, "Cerrando programa con SIGINT)");
+
+    // Cerrar pipe para que Arkham termine
+    close(globalInfo->log_fd);
+    globalInfo->log_fd = -1;
+
+    // Esperar a que Arkham termine
+    if (globalInfo->arkham_pid > 0) {
+        waitpid(globalInfo->arkham_pid, NULL, 0);
+    }
+    
 
     // CONFIG
     free(globalInfo->config->ip_fleck);
@@ -62,6 +74,7 @@ void handle_sigint(/*int sig*/) {
     free(globalInfo);
 
 
+
     printF("Recursos liberados correctamente. Saliendo...\n");
     signal(SIGINT, SIG_DFL);
     raise(SIGINT);
@@ -76,6 +89,7 @@ void* workers_server(/*void* arg*/) {
 
 
     printF("Esperando conexiones de Workers...\n");
+    log_event(globalInfo, "Servidor para Workers iniciado");
     //Bucle para leer cada conexion que nos llegue de un worker
     while (1)
     {
@@ -130,6 +144,7 @@ void* fleck_server(/*void* arg*/) {
 
 
     printF("Esperando conexiones de Flecks...\n");
+    log_event(globalInfo, "Servidor para Flecks iniciado.");
     //Bucle para leer cada petición que nos llegue de un fleck
     while (1)
     {
@@ -197,6 +212,57 @@ void* fleck_server(/*void* arg*/) {
 }
 
 
+/**
+ * Crea el proceso Arkham y establece la comunicación por pipe
+ * @param globalInfo Estructura con la información global del sistema
+ * @return 0 en éxito, -1 en error
+ */
+int create_arkham_process(GlobalInfoGotham* globalInfo) {
+    int pipefd[2];
+    
+    // Crear pipe
+    if (pipe(pipefd) < 0) {
+        perror("Error al crear pipe para Arkham");
+        return -1;
+    }
+
+    // Crear proceso hijo
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("Error al crear proceso Arkham");
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
+
+    if (pid == 0) { // Proceso hijo (Arkham)
+        close(pipefd[1]); // Cerrar extremo de escritura
+        
+        // Redirigir stdin al pipe
+        if (dup2(pipefd[0], STDIN_FILENO) == -1) {
+            perror("Error redirigiendo stdin en Arkham");
+            exit(EXIT_FAILURE);
+        }
+        close(pipefd[0]);
+
+        // Ejecutar Arkham
+        execl("./arkham.exe", "./arkham.exe", NULL);
+        
+        // Si llegamos aquí, hubo un error
+        perror("Error al ejecutar Arkham");
+        exit(EXIT_FAILURE);
+
+    } else { // Proceso padre (Gotham)
+        close(pipefd[0]); // Cerrar extremo de lectura
+        globalInfo->log_fd = pipefd[1];
+        globalInfo->arkham_pid = pid;
+        
+        log_event(globalInfo, "Sistema Gotham iniciado");
+        return 0;
+    }
+}
+
+
 int main(int argc, char *argv[]) {
     
     signal(SIGINT, handle_sigint); // Administrar cierre de recursos
@@ -220,30 +286,12 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-     // Crear pipe para comunicación con Arkham
-    int pipefd[2];
-    if (pipe(pipefd) < 0) {
-        perror("Error creando pipe para Arkham");
-        exit(EXIT_FAILURE);
+    // Crear proceso Arkham
+    if (create_arkham_process(globalInfo) == -1) {
+        free(globalInfo->config);
+        free(globalInfo);
+        return -1;
     }
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("Error al forkar Arkham");
-        exit(EXIT_FAILURE);
-    }
-    if (pid == 0) {
-        // Proceso Arkham
-        close(pipefd[1]);  // cerramos escritura
-        // Reemplazar stdin por el extremo de lectura (fd = pipefd[0])
-        dup2(pipefd[0], STDIN_FILENO);
-        close(pipefd[0]);
-        execl("./arkham.exe", "arkham.exe", NULL);
-        perror("Error al ejecutar Arkham");
-        exit(EXIT_FAILURE);
-    }
-    // Padre (Gotham)
-    close(pipefd[0]);      // cerramos lectura
-    globalInfo->log_fd = pipefd[1];
 
     // Mostrar configuración
     GOTHAM_show_config(globalInfo->config);
@@ -282,96 +330,6 @@ int main(int argc, char *argv[]) {
         handle_sigint();
     }
 
-
-
-    ///SELECT (IGNORAR ESTA PARTE!!!) Posible mejora a futuro:
-    //
-    // 
-    // Server server_worker;
-    // int new_socket, valread, i;
-    // fd_set current_sockets, ready_sockets; // Conjunto de descriptores para `select`
-    // int client_sockets[MAX_CONNECTIONS]; // Almacena los sockets activos
-    // char buffer[256];
-    // // // Inicializar lista de clientes
-    // // for (i = 0; i < FD_SETSIZE; i++) {
-    // //     client_sockets[i] = 0;
-    // // }
-
-    // // Configurar servidor
-    // server_worker = create_server(config->ip_workers, config->port_workers, 10);
-    // start_server(&server_worker);
-
-
-    // // Limpiar el conjunto de descriptores
-    // FD_ZERO(&current_sockets);
-    // // Agregar el socket del servidor al conjunto
-    // FD_SET(server_worker.server_fd, &current_sockets);
-
-    // printf("Servidor Gotham listo para aceptar conexiones de Workers.\n");
-    // while (1) {
-    //     ready_sockets = current_sockets;
-
-    //     // // Agregar sockets de clientes al conjunto
-    //     for (i = 0; i < MAX_CONNECTIONS; i++) {
-    //         int sd = client_sockets[i];
-    //         if (sd > 0) {
-    //             FD_SET(sd, &current_sockets);
-    //         }
-    //         if (sd > max_fd) {
-    //             max_fd = sd; 
-    //         }
-    //     }
-
-    //     // Esperar actividad en uno de los sockets
-    //     if (select(MAX_CONNECTIONS, &ready_sockets, NULL, NULL, NULL) < 0) {
-    //         perror("Error en select");
-    //         return -1;
-    //     }
-
-    //     // Verificar si hay una nueva conexión entrante
-    //     if (FD_ISSET(server_worker.server_fd, &current_sockets)) {
-    //         new_socket = accept_connection(&server_worker);
-    //         if (new_socket < 0) {
-    //             perror("Error al aceptar nueva conexión");
-    //             continue;
-    //         }
-
-    //         printf("Nueva conexión aceptada: socket %d\n", new_socket);
-
-    //         // Agregar el nuevo socket a la lista de clientes
-    //         for (i = 0; i < MAX_CONNECTIONS; i++) {
-    //             if (client_sockets[i] == 0) {
-    //                 client_sockets[i] = new_socket;
-    //                 printf("Agregado a la lista de sockets en la posición %d\n", i);
-    //                 break;
-    //             }
-    //         }
-
-    //         if (i == MAX_CONNECTIONS) {
-    //             printf("Número máximo de conexiones alcanzado. Cerrando conexión con %d\n", new_socket);
-    //             close(new_socket);
-    //         }
-    //     }
-
-    //     // Verificar actividad en los sockets de clientes
-    //     for (i = 0; i < MAX_CONNECTIONS; i++) {
-    //         int sd = client_sockets[i];
-    //         if (FD_ISSET(sd, &current_sockets)) {
-    //             // Manejar el mensaje del cliente
-    //             handle_worker_message(sd);
-
-    //             // Si el cliente cerró la conexión, eliminarlo de la lista
-    //             if (recv(sd, buffer, sizeof(buffer), MSG_PEEK | MSG_DONTWAIT) == 0) {
-    //                 close(sd);
-    //                 client_sockets[i] = 0;
-    //                 printf("Socket %d desconectado y eliminado de la lista.\n", sd);
-    //             }
-    //         }
-    //     }
-    // }
-
-    // close_server(&server_worker);
-    ///SELECT
 
  
     pthread_join(globalInfo->fleck_server_thread, NULL);

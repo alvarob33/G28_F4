@@ -59,6 +59,7 @@ typedef struct {
 
     // Logs
     int log_fd;                // FD del pipe hacia Arkham
+    int arkham_pid;
 
 } GlobalInfoGotham;
 

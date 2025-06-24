@@ -200,7 +200,11 @@ void* handle_fleck_connection(void* void_args) {
 
             if (username && ip && port) {
                 //PRINTF
-                printf("Usuario conectado: %s, IP: %s, Puerto: %s\n", username, ip, port);
+                char *mensaje = NULL;
+                asprintf(&mensaje, "Fleck conectado: %s, IP: %s, Puerto: %s\n", username, ip, port);
+                printf(mensaje);
+                log_event(globalInfo, mensaje);
+                free(mensaje);
 
                 // Responder con OK
                 unsigned char *response = crear_trama(TYPE_CONNECT_FLECK_GOTHAM, (unsigned char*)"", strlen(""));  // DATA vacío
@@ -224,6 +228,7 @@ void* handle_fleck_connection(void* void_args) {
         {
             // Comando DISTORT
             printF("Comando DISTORT recibido de Fleck.\n");
+            log_event(globalInfo, "Comando DISTORT recibido de Fleck.");
             
             // Parsear los datos: <mediaType>&<fileName> (duplicándolos para poder liberar memoria de result)
             char *mediaType = strdup(strtok(result->data, "&"));
@@ -264,6 +269,7 @@ void* handle_fleck_connection(void* void_args) {
                 }
                 free(response);
                 printF("Worker Harley pricipal enviado a Fleck.\n");
+                log_event(globalInfo, "Respuesta con Worker Harley pricipal enviado a Fleck.");
             } else if (strcmp(mediaType, TEXT) == 0)
             {
                 // Responder con datos Worker Enigma principal
@@ -277,6 +283,7 @@ void* handle_fleck_connection(void* void_args) {
                 }
                 free(response);
                 printF("Worker Enigma pricipal enviado a Fleck.\n");
+                log_event(globalInfo, "Respuesta con Worker Enigma pricipal enviado a Fleck.");
             } else {
                 // Responder con MEDIA_KO
                 unsigned char *response = crear_trama(TYPE_DISTORT_FLECK_GOTHAM, (unsigned char*)"MEDIA_KO", strlen("MEDIA_KO")); 
@@ -289,6 +296,7 @@ void* handle_fleck_connection(void* void_args) {
                 asprintf(&buffer, "Media type '%s' no reconocido. Respuesta de MEDIA_KO enviada a Fleck.\n", mediaType);
                 printF(buffer);
                 free(buffer);
+                log_event(globalInfo, "Media del comando DISTORT de Fleck no reconocida.");
             }
             free(mediaType);
             free(fileName);
@@ -424,6 +432,7 @@ int store_new_worker(GlobalInfoGotham* globalInfo, TramaResult* result) {
     if (globalInfo->num_workers >= MAX_WORKERS) {
         pthread_mutex_unlock(&globalInfo->worker_mutex);
         printF("Error: No se pudo agregar el worker. Límite de workers alcanzado.\n");
+        log_event(globalInfo, "Error: No se pudo agregar el worker. Límite de workers alcanzado.\n");
         return 0;
     }
     
@@ -464,6 +473,8 @@ int store_new_worker(GlobalInfoGotham* globalInfo, TramaResult* result) {
     asprintf(&aux, "New worker added: workerType=%s, IP=%s, Port=%s\n",
            globalInfo->workers[globalInfo->num_workers].workerType, globalInfo->workers[globalInfo->num_workers].IP, globalInfo->workers[globalInfo->num_workers].Port);
     printF(aux);
+    log_event(globalInfo, aux);
+    free(aux);
 
     globalInfo->num_workers++;
     
@@ -527,7 +538,8 @@ void remove_worker(GlobalInfoGotham* globalInfo, int socket_fd) {
 
                 // Mostrar mensaje indicando que encontramos un nuevo Principal Worker
                 char* buffer;
-                asprintf(&buffer, "Nuevo pworker de tipo 'Text' encontrado en el índice %d.\n", globalInfo->enigma_pworker_index);
+                asprintf(&buffer, "Nuevo Principal Worker de tipo 'Text' encontrado en el índice %d.\n", globalInfo->enigma_pworker_index);
+                log_event(globalInfo, buffer);
                 printF(buffer);
                 free(buffer);
                 break;
@@ -536,6 +548,8 @@ void remove_worker(GlobalInfoGotham* globalInfo, int socket_fd) {
 
         if (globalInfo->enigma_pworker_index == -1) {
             printF("No hay Workers de tipo 'Text' para asignar como Principal Worker.\n");
+            log_event(globalInfo, "No hay Workers de tipo 'Text' para asignar como Principal Worker.");
+            
         }
     } else if (index == globalInfo->harley_pworker_index) {
         globalInfo->harley_pworker_index = -1;  // Borrar el índice de Harley Principal Worker
@@ -568,6 +582,7 @@ void remove_worker(GlobalInfoGotham* globalInfo, int socket_fd) {
                 // Mostrar mensaje indicando que encontramos un nuevo Principal Worker
                 char* buffer;
                 asprintf(&buffer, "Nuevo pworker de tipo 'Media' encontrado en el índice %d.\n", globalInfo->harley_pworker_index);
+                log_event(globalInfo, buffer);
                 printF(buffer);
                 free(buffer);
                 break;
@@ -575,6 +590,7 @@ void remove_worker(GlobalInfoGotham* globalInfo, int socket_fd) {
         }
         if (globalInfo->harley_pworker_index == -1) {
             printF("No hay Workers de tipo 'Media' para asignar como Principal Worker.\n");
+            log_event(globalInfo, "No hay Workers de tipo 'Text' para asignar como Principal Worker.");
         }
     }
 
@@ -624,6 +640,7 @@ void *handle_worker_connection(void *void_args) {
             globalInfo->enigma_pworker_index = index_worker;
             // Se le indica que es el worker principal en la trama
             trama = crear_trama(TYPE_PRINCIPAL_WORKER, (unsigned char*)"", strlen(""));
+            // log_event(globalInfo, "Nuevo Worker asignado como Principal.");
         } else {
             // Se le indica que no es el worker principal en la trama
             trama = crear_trama(TYPE_CONNECT_WORKER_GOTHAM, (unsigned char*)"", strlen(""));
@@ -634,6 +651,7 @@ void *handle_worker_connection(void *void_args) {
             globalInfo->harley_pworker_index = index_worker;
             // Se le indica que es el worker principal en la trama
             trama = crear_trama(TYPE_PRINCIPAL_WORKER, (unsigned char*)"", strlen(""));
+            // log_event(globalInfo, "Nuevo Worker asignado como Principal.");
         } else {
             // Se le indica que no es el worker principal en la trama
             trama = crear_trama(TYPE_CONNECT_WORKER_GOTHAM, (unsigned char*)"", strlen(""));
@@ -680,8 +698,22 @@ void log_event(GlobalInfoGotham *g, const char *fmt, ...) {
     va_end(ap);
 
     unsigned char *frame = crear_trama(TYPE_LOG, (unsigned char*)msg, strlen(msg));
-    if (!frame) return;
+    if (!frame) {
+        perror("Error creando trama de log");
+        return;
+    }
+
+    // Verificamos que el file descriptor sea válido
+    if (g->log_fd <= 0) {
+        perror("File descriptor de log inválido");
+        free(frame);
+        return;
+    }
+    
     // Siempre escribimos BUFFER_SIZE bytes para que Arkham lea tramas completas
-    write(g->log_fd, frame, BUFFER_SIZE);
+    ssize_t written = write(g->log_fd, frame, BUFFER_SIZE);
+    if (written != BUFFER_SIZE) {
+        perror("Error escribiendo en pipe de Arkham");
+    }
     free(frame);
 }
